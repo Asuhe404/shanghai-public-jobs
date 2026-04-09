@@ -416,16 +416,16 @@ def generate_html(data: Dict[str, Any], output_path: Path, template_file: Path) 
     sy_count = data.get('sy_count', 0)
     gq_count = data.get('gq_count', 0)
     
-    # 替换统计卡片中的数字
-    html = html.replace('id="totalJobs">0<', f'id="totalJobs">{total_jobs}<')
-    html = html.replace('id="gwyJobs">0<', f'id="gwyJobs">{gwy_count}<')
-    html = html.replace('id="syJobs">0<', f'id="syJobs">{sy_count}<')
-    html = html.replace('id="gqJobs">0<', f'id="gqJobs">{gq_count}<')
+    # 替换统计卡片中的数字 - 修复替换逻辑
+    html = html.replace('id="totalJobs">0</div>', f'id="totalJobs">{total_jobs}</div>')
+    html = html.replace('id="gwyJobs">0</div>', f'id="gwyJobs">{gwy_count}</div>')
+    html = html.replace('id="syJobs">0</div>', f'id="syJobs">{sy_count}</div>')
+    html = html.replace('id="gqJobs">0</div>', f'id="gqJobs">{gq_count}</div>')
     
     # 替换分类标题中的数量显示
-    html = html.replace('id="gwyCount">0<', f'id="gwyCount">{gwy_count}<')
-    html = html.replace('id="syCount">0<', f'id="syCount">{sy_count}<')
-    html = html.replace('id="gqCount">0<', f'id="gqCount">{gq_count}<')
+    html = html.replace('id="gwyCount">0</span>', f'id="gwyCount">{gwy_count}</span>')
+    html = html.replace('id="syCount">0</span>', f'id="syCount">{sy_count}</span>')
+    html = html.replace('id="gqCount">0</span>', f'id="gqCount">{gq_count}</span>')
     
     # 重点招聘
     highlights_html = ''

@@ -13,6 +13,81 @@ import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
+def get_job_source_info(position: str, unit: str, category: str) -> tuple:
+    """
+    根据职位、单位和类别智能分配数据源和链接
+    
+    返回: (source, source_url)
+    """
+    # 默认值
+    source = "官方公告"
+    source_url = "#"
+    
+    # 根据单位类型分配数据源
+    if "区" in unit and ("国企" in position or "国资" in position):
+        # 区属国企
+        source = f"{unit}国资委官网"
+        source_url = f"https://www.shanghai.gov.cn/search?q={position}"
+    elif "医院" in position:
+        # 医院招聘
+        source = "上海市卫健委官网"
+        source_url = "https://wsjkw.sh.gov.cn/"
+    elif "学校" in position or "学院" in position or "大学" in position:
+        # 学校招聘
+        source = "上海市教委官网"
+        source_url = "https://edu.sh.gov.cn/"
+    elif "博物馆" in position:
+        # 博物馆招聘
+        source = "上海市文旅局官网"
+        source_url = "https://whlyj.sh.gov.cn/"
+    elif "文化广场" in position:
+        # 文化单位招聘
+        source = "上海市文旅局官网"
+        source_url = "https://whlyj.sh.gov.cn/"
+    elif "同济医院" in position or "第六人民医院" in position:
+        # 具体医院
+        source = "医院官方网站"
+        if "同济医院" in position:
+            source_url = "https://www.tongjihospital.com.cn/"
+        elif "第六人民医院" in position:
+            source_url = "https://www.6thhosp.com/"
+    elif "上海政法学院" in position:
+        source = "上海政法学院官网"
+        source_url = "https://www.shupl.edu.cn/"
+    elif "上海对外经贸大学" in position:
+        source = "上海对外经贸大学官网"
+        source_url = "https://www.suibe.edu.cn/"
+    elif "上海博物馆" in position:
+        source = "上海博物馆官网"
+        source_url = "https://www.shanghaimuseum.net/"
+    elif "黄浦区" in position and "国企" in position:
+        source = "黄浦区国资委官网"
+        source_url = "https://www.huangpuqu.gov.cn/"
+    elif "普陀区" in position and "国企" in position:
+        source = "普陀区国资委官网"
+        source_url = "https://www.putuo.gov.cn/"
+    elif "嘉定区" in position and "国企" in position:
+        source = "嘉定区国资委官网"
+        source_url = "https://www.jiading.gov.cn/"
+    elif "骐骥春来" in position:
+        source = "上海国资国企校园招聘平台"
+        source_url = "https://www.shgzw.gov.cn/"
+    
+    # 根据类别调整
+    if category == "gwy":
+        source = "上海市公务员局官网"
+        source_url = "https://www.shacs.gov.cn/"
+    elif category == "sy":
+        if source == "官方公告":
+            source = "上海市人社局官网"
+            source_url = "https://rsj.sh.gov.cn/"
+    elif category == "gq":
+        if source == "官方公告":
+            source = "上海市国资委官网"
+            source_url = "https://www.shgzw.gov.cn/"
+    
+    return source, source_url
+
 def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
     """
     解析Markdown格式的日报，提取结构化信息
@@ -209,6 +284,9 @@ def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
                     unit = match.group(1)
                     break
             
+            # 智能分配数据源和链接
+            source, source_url = get_job_source_info(position, unit, current_category)
+            
             job_data = {
                 'position': position,
                 'unit': unit,
@@ -216,8 +294,8 @@ def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
                 'employment_type': '正式编制',
                 'benefits': '五险一金、带薪年假等',
                 'summary': description if description else '官方招聘信息，请及时报名',
-                'source': '上海市相关单位官网',
-                'source_url': '#'
+                'source': source,
+                'source_url': source_url
             }
             
             if current_category == 'gwy':
@@ -255,15 +333,17 @@ def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
         ]
         
         for job in gq_jobs:
+            unit = job.split('区')[0] + '区' if '区' in job else '上海市'
+            source, source_url = get_job_source_info(job, unit, 'gq')
             result['gq_jobs'].append({
                 'position': job,
-                'unit': job.split('区')[0] + '区' if '区' in job else '上海市',
+                'unit': unit,
                 'requirements': '详见官方公告',
                 'employment_type': '正式编制',
                 'benefits': '五险一金、带薪年假、补充公积金等',
                 'summary': '官方招聘信息，请及时报名',
-                'source': '上海市国资委官网',
-                'source_url': '#'
+                'source': source,
+                'source_url': source_url
             })
         
         # 模拟事业编招聘
@@ -281,15 +361,35 @@ def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
         ]
         
         for job in sy_jobs:
+            # 提取单位
+            unit = '未知单位'
+            unit_patterns = [
+                r'^(.+?区)',
+                r'^(.+?市)',
+                r'^(.+?大学)',
+                r'^(.+?学院)',
+                r'^(.+?医院)',
+                r'^(.+?学校)',
+                r'^(.+?中心)',
+                r'^(.+?局)',
+                r'^(.+?部)'
+            ]
+            for pattern in unit_patterns:
+                match = re.match(pattern, job)
+                if match:
+                    unit = match.group(1)
+                    break
+            
+            source, source_url = get_job_source_info(job, unit, 'sy')
             result['sy_jobs'].append({
                 'position': job,
-                'unit': job.split('市')[1].split('区')[0] if '市' in job else job.split('上海')[1].split('2')[0],
+                'unit': unit,
                 'requirements': '详见官方公告',
                 'employment_type': '事业单位编制',
                 'benefits': '五险一金、职业发展、培训机会等',
                 'summary': '官方招聘信息，请及时报名',
-                'source': '上海市人社局官网',
-                'source_url': '#'
+                'source': source,
+                'source_url': source_url
             })
     
     return result

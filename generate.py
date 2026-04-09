@@ -16,9 +16,7 @@ from typing import Dict, List, Any, Optional
 def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
     """
     解析Markdown格式的日报，提取结构化信息
-    支持两种格式：
-    1. 新格式（标准模板）
-    2. 旧格式（带**粗体**和嵌套分类统计）
+    简化版本：专门处理当前的Markdown格式
     """
     content = md_path.read_text(encoding='utf-8')
     
@@ -39,104 +37,104 @@ def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
         'source_file': md_path.name
     }
     
-    # 提取日期（从文件名或内容）
+    # 提取日期（从文件名）
     date_match = re.search(r'(\d{4}-\d{2}-\d{2})', md_path.name)
     if date_match:
         result['date'] = date_match.group(1)
     
-    # 解析Markdown内容
+    # 解析Markdown内容 - 简化方法
     lines = content.split('\n')
-    current_section = None
+    in_summary = False
+    in_category_stats = False
+    in_highlights = False
     current_category = None
-    in_category_stats = False  # 标记是否在"分类统计:"子项中
     
     for i, line in enumerate(lines):
-        # 清理行：去除粗体标记和首尾空格
-        line_clean = line.strip()
-        # 去除**标记
-        line_clean = line_clean.replace('**', '')
+        line_stripped = line.strip()
         
         # 跳过空行
-        if not line_clean:
+        if not line_stripped:
             continue
         
-        # 提取采集时间（支持"采集时间:"和"**采集时间:**"格式）
-        if '采集时间:' in line_clean:
-            # 提取冒号后的内容
-            parts = line_clean.split('采集时间:', 1)
+        # 1. 提取采集时间
+        if '采集时间:' in line_stripped:
+            # 处理可能的粗体标记
+            clean_line = line_stripped.replace('**', '')
+            parts = clean_line.split('采集时间:', 1)
             if len(parts) > 1:
                 result['collection_time'] = parts[1].strip()
             continue
         
-        # 提取检索范围
-        if '检索范围:' in line_clean:
-            parts = line_clean.split('检索范围:', 1)
+        # 2. 提取检索范围
+        if '检索范围:' in line_stripped:
+            clean_line = line_stripped.replace('**', '')
+            parts = clean_line.split('检索范围:', 1)
             if len(parts) > 1:
                 result['search_scope'] = parts[1].strip()
             continue
         
-        # 提取总体汇总
-        if '总体汇总' in line_clean:
-            current_section = 'summary'
+        # 3. 检测总体汇总部分
+        if '总体汇总' in line_stripped:
+            in_summary = True
             continue
         
-        if current_section == 'summary':
-            # 检查是否进入"分类统计:"子项
-            if '分类统计:' in line_clean:
+        if in_summary:
+            # 清理行，去除粗体标记
+            clean_line = line_stripped.replace('**', '')
+            
+            # 检查是否进入分类统计子项
+            if '分类统计:' in clean_line:
                 in_category_stats = True
                 continue
             
-            # 如果在分类统计子项中，检查缩进行
-            if in_category_stats and line_clean.startswith('- '):
-                # 提取分类统计行
-                if '公务员:' in line_clean:
-                    match = re.search(r'(\d+)条', line_clean)
-                    if match:
-                        result['gwy_count'] = int(match.group(1))
-                elif '事业编:' in line_clean:
-                    match = re.search(r'(\d+)条', line_clean)
-                    if match:
-                        result['sy_count'] = int(match.group(1))
-                elif '国企:' in line_clean:
-                    match = re.search(r'(\d+)条', line_clean)
-                    if match:
-                        result['gq_count'] = int(match.group(1))
+            # 检查是否进入最值得关注的3条
+            if '最值得关注的3条:' in clean_line:
+                in_summary = False
+                in_category_stats = False
+                in_highlights = True
                 continue
-            elif line_clean.startswith('- ') and not in_category_stats:
-                # 标准格式：直接列出分类
-                if '公务员:' in line_clean:
-                    match = re.search(r'(\d+)条', line_clean)
-                    if match:
-                        result['gwy_count'] = int(match.group(1))
-                elif '事业编:' in line_clean:
-                    match = re.search(r'(\d+)条', line_clean)
-                    if match:
-                        result['sy_count'] = int(match.group(1))
-                elif '国企:' in line_clean:
-                    match = re.search(r'(\d+)条', line_clean)
-                    if match:
-                        result['gq_count'] = int(match.group(1))
-                elif '今日发现招聘信息:' in line_clean:
-                    match = re.search(r'(\d+)条', line_clean)
-                    if match:
-                        result['total_jobs'] = int(match.group(1))
             
-            # 检查最值得关注的3条
-            if '最值得关注的3条:' in line_clean:
-                current_section = 'highlights'
-                in_category_stats = False  # 重置分类统计标记
+            # 如果在分类统计子项中
+            if in_category_stats:
+                if clean_line.startswith('- '):
+                    # 提取分类统计行
+                    stat_line = clean_line[2:].strip()
+                    if '公务员:' in stat_line:
+                        match = re.search(r'(\d+)条', stat_line)
+                        if match:
+                            result['gwy_count'] = int(match.group(1))
+                    elif '事业编:' in stat_line:
+                        match = re.search(r'(\d+)条', stat_line)
+                        if match:
+                            result['sy_count'] = int(match.group(1))
+                    elif '国企:' in stat_line:
+                        match = re.search(r'(\d+)条', stat_line)
+                        if match:
+                            result['gq_count'] = int(match.group(1))
                 continue
+            
+            # 如果不是分类统计子项，检查总职位数
+            if clean_line.startswith('- ') and '今日发现招聘信息:' in clean_line:
+                match = re.search(r'(\d+)条', clean_line)
+                if match:
+                    result['total_jobs'] = int(match.group(1))
         
-        # 提取重点招聘
-        if current_section == 'highlights':
-            # 匹配 "1. 标题 (描述)" 或 "1. 标题（描述）"
-            if line_clean.startswith('1. ') or line_clean.startswith('2. ') or line_clean.startswith('3. '):
-                # 提取标题和描述
-                line_text = line_clean[3:].strip()
+        # 4. 提取重点招聘
+        if in_highlights:
+            clean_line = line_stripped.replace('**', '')
+            
+            # 检查是否离开重点招聘部分
+            if clean_line.startswith('##') or clean_line.startswith('###'):
+                in_highlights = False
+                continue
+            
+            # 提取重点招聘项
+            if clean_line.startswith('1. ') or clean_line.startswith('2. ') or clean_line.startswith('3. '):
+                highlight_text = clean_line[3:].strip()
                 
-                # 使用正则表达式提取标题和描述
-                # 匹配中文括号或英文括号
-                title_match = re.match(r'^(.*?)(?:\s*[（(](.*?)[）)])?$', line_text)
+                # 提取标题和描述
+                # 匹配格式: "标题 (描述)" 或 "标题（描述）"
+                title_match = re.match(r'^(.*?)(?:\s*[（(](.*?)[）)])?$', highlight_text)
                 if title_match:
                     title = title_match.group(1).strip()
                     desc = title_match.group(2) if title_match.group(2) else ''
@@ -145,64 +143,93 @@ def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
                         'description': desc
                     })
         
-        # 检测分类标题（如"### 国企招聘 (4条)"）
-        if ('国企招聘' in line_clean and '条' in line_clean) or ('国企招聘' in line and '条' in line):
-            current_category = 'gq'
-            current_section = 'jobs'
-            continue
-        elif ('事业编招聘' in line_clean and '条' in line_clean) or ('事业编招聘' in line and '条' in line):
-            current_category = 'sy'
-            current_section = 'jobs'
-            continue
-        elif ('公务员招聘' in line_clean and '条' in line_clean) or ('公务员招聘' in line and '条' in line):
-            current_category = 'gwy'
-            current_section = 'jobs'
+        # 5. 检测招聘分类标题
+        if line_stripped.startswith('### '):
+            clean_line = line_stripped.replace('**', '').replace('### ', '').strip()
+            
+            if '国企招聘' in clean_line and '条' in clean_line:
+                current_category = 'gq'
+                # 提取国企数量
+                match = re.search(r'\((\d+)条\)', clean_line)
+                if match:
+                    result['gq_count'] = int(match.group(1))
+            elif '事业编招聘' in clean_line and '条' in clean_line:
+                current_category = 'sy'
+                # 提取事业编数量
+                match = re.search(r'\((\d+)条\)', clean_line)
+                if match:
+                    result['sy_count'] = int(match.group(1))
+            elif '公务员招聘' in clean_line and '条' in clean_line:
+                current_category = 'gwy'
+                # 提取公务员数量
+                match = re.search(r'\((\d+)条\)', clean_line)
+                if match:
+                    result['gwy_count'] = int(match.group(1))
             continue
         
-        # 解析具体招聘信息
-        if current_section == 'jobs' and current_category:
-            # 匹配数字列表项（如"1. "开头）
-            if re.match(r'^\d+\.\s+', line_clean):
-                # 解析职位行
-                job_text = re.sub(r'^\d+\.\s+', '', line_clean).strip()
-                
-                # 提取职位标题（分隔符可能是" - "或" – "）
-                position = job_text
-                description = ''
-                if ' - ' in job_text:
-                    parts = job_text.split(' - ', 1)
-                    position = parts[0].strip()
-                    description = parts[1].strip()
-                elif ' – ' in job_text:
-                    parts = job_text.split(' – ', 1)
-                    position = parts[0].strip()
-                    description = parts[1].strip()
-                
-                # 提取单位（假设单位在开头）
-                unit_match = re.match(r'(.+?[区院校中心局部])', position)
-                unit = unit_match.group(1) if unit_match else '未知单位'
-                
-                job_data = {
-                    'position': position,
-                    'unit': unit,
-                    'requirements': '详见官方公告',
-                    'employment_type': '正式编制',
-                    'benefits': '五险一金、带薪年假等',
-                    'summary': description if description else '官方招聘信息，请及时报名',
-                    'source': '上海市相关单位官网',
-                    'source_url': '#'
-                }
-                
-                if current_category == 'gwy':
-                    result['gwy_jobs'].append(job_data)
-                elif current_category == 'sy':
-                    result['sy_jobs'].append(job_data)
-                elif current_category == 'gq':
-                    result['gq_jobs'].append(job_data)
+        # 6. 解析具体招聘信息
+        if current_category and line_stripped.startswith('1. ') or line_stripped.startswith('2. ') or line_stripped.startswith('3. ') or line_stripped.startswith('4. ') or line_stripped.startswith('5. ') or line_stripped.startswith('6. ') or line_stripped.startswith('7. ') or line_stripped.startswith('8. ') or line_stripped.startswith('9. ') or line_stripped.startswith('10. '):
+            # 清理行，去除粗体标记和列表编号
+            clean_line = line_stripped.replace('**', '')
+            # 移除列表编号
+            job_text = re.sub(r'^\d+\.\s+', '', clean_line).strip()
+            
+            # 提取职位信息
+            position = job_text
+            description = ''
+            
+            # 尝试分割职位和描述
+            if ' - ' in job_text:
+                parts = job_text.split(' - ', 1)
+                position = parts[0].strip()
+                description = parts[1].strip()
+            elif ' – ' in job_text:
+                parts = job_text.split(' – ', 1)
+                position = parts[0].strip()
+                description = parts[1].strip()
+            
+            # 提取单位（简化逻辑）
+            unit = '未知单位'
+            # 尝试从职位中提取单位
+            unit_patterns = [
+                r'^(.+?区)',
+                r'^(.+?市)',
+                r'^(.+?大学)',
+                r'^(.+?学院)',
+                r'^(.+?医院)',
+                r'^(.+?学校)',
+                r'^(.+?中心)',
+                r'^(.+?局)',
+                r'^(.+?部)'
+            ]
+            
+            for pattern in unit_patterns:
+                match = re.match(pattern, position)
+                if match:
+                    unit = match.group(1)
+                    break
+            
+            job_data = {
+                'position': position,
+                'unit': unit,
+                'requirements': '详见官方公告',
+                'employment_type': '正式编制',
+                'benefits': '五险一金、带薪年假等',
+                'summary': description if description else '官方招聘信息，请及时报名',
+                'source': '上海市相关单位官网',
+                'source_url': '#'
+            }
+            
+            if current_category == 'gwy':
+                result['gwy_jobs'].append(job_data)
+            elif current_category == 'sy':
+                result['sy_jobs'].append(job_data)
+            elif current_category == 'gq':
+                result['gq_jobs'].append(job_data)
     
-    # 如果没有从内容中提取到数据，使用模拟数据
+    # 验证和补全数据
+    # 如果总职位数为0但分类计数有值，计算总和
     if result['total_jobs'] == 0:
-        # 尝试从分类计数推断总职位数
         result['total_jobs'] = result['gwy_count'] + result['sy_count'] + result['gq_count']
     
     # 如果还是没有数据，使用模拟数据

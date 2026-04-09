@@ -43,23 +43,31 @@ jobs:
         with:
           python-version: '3.11'
           
+      - name: 调试目录结构
+        run: |
+          echo "当前工作目录: $(pwd)"
+          echo "目录结构:"
+          ls -la
+          echo "检查web目录:"
+          ls -la web/ 2>&1 || echo "web目录不存在"
+          echo "检查generate.py:"
+          ls -la generate.py 2>&1 || echo "generate.py不存在"
+          
       - name: 生成静态网站
         run: |
-          cd web
-          python3 generate.py
+          # 尝试不同的路径
+          if [ -f "generate.py" ]; then
+            echo "在根目录找到generate.py"
+            python3 generate.py
+          elif [ -f "web/generate.py" ]; then
+            echo "在web/目录找到generate.py"
+            cd web
+            python3 generate.py
+          else
+            echo "错误: 未找到generate.py文件"
+            exit 1
+          fi
           echo "网站生成完成"
-          
-      - name: 配置Git用户
-        run: |
-          git config --global user.name "GitHub Actions Bot"
-          git config --global user.email "actions@github.com"
-          
-      - name: 提交生成的网站文件
-        run: |
-          cd public
-          git add -A
-          git commit -m "Auto-generated site: $(date +'%Y-%m-%d %H:%M:%S')" || echo "没有更改可提交"
-          git push origin main || echo "推送失败或无更改"
           
       - name: 设置Pages
         uses: actions/configure-pages@v4

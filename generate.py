@@ -503,59 +503,85 @@ def main():
     # 确保public目录存在
     PUBLIC_DIR.mkdir(exist_ok=True, parents=True)
     
-    # 查找最新的日报文件
-    latest_md = REPORTS_DIR / "latest.md"
-    if not latest_md.exists():
+    # 查找所有日报文件
+    md_files = list(REPORTS_DIR.glob("*.md"))
+    if not md_files:
         # 尝试备用路径
-        alt_md = Path("reports/shanghai-public-jobs/latest.md")
-        if alt_md.exists():
-            latest_md = alt_md
+        alt_md = Path("reports/shanghai-public-jobs/*.md")
+        if any(alt_md.parent.glob("*.md")):
+            md_files = list(alt_md.parent.glob("*.md"))
             REPORTS_DIR = alt_md.parent
-            print(f"使用备用路径: {latest_md}")
+            print(f"使用备用路径: {REPORTS_DIR}")
         else:
-            print(f"错误: 未找到最新日报文件: {latest_md}")
+            print(f"错误: 未找到日报文件: {REPORTS_DIR}")
             print(f"尝试查找路径: {REPORTS_DIR}")
             return
     
-    # 解析最新的日报
-    print(f"解析日报文件: {latest_md}")
-    latest_data = parse_markdown_report(latest_md)
+    print(f"找到 {len(md_files)} 个日报文件")
     
-    # 设置日期（如果没有从文件中提取到）
-    if not latest_data['date']:
-        latest_data['date'] = datetime.datetime.now().strftime('%Y-%m-%d')
+    # 解析所有日报文件并生成HTML
+    all_data = []
+    latest_date = None
+    latest_data = None
     
-    # 生成HTML文件
-    output_file = PUBLIC_DIR / f"{latest_data['date']}.html"
-    generate_html(latest_data, output_file, TEMPLATE_FILE)
-    
-    # 生成今日的latest.html
-    latest_html = PUBLIC_DIR / "latest.html"
-    shutil.copy2(output_file, latest_html)
-    
-    # 查找所有历史HTML文件以生成索引
-    html_files = list(PUBLIC_DIR.glob("*.html"))
-    html_files = [f for f in html_files if f.name not in ['index.html', 'latest.html']]
-    
-    data_list = []
-    for html_file in html_files:
-        date_match = re.search(r'(\d{4}-\d{2}-\d{2})', html_file.name)
+    for md_file in md_files:
+        # 从文件名提取日期（如2026-04-09.md）
+        date_match = re.search(r'(\d{4}-\d{2}-\d{2})', md_file.name)
         if date_match:
             date_str = date_match.group(1)
-            # 使用最新数据或模拟数据
-            if date_str == latest_data['date']:
-                data_list.append(latest_data)
-            else:
-                # 对于历史文件，可以创建简化版数据
-                data_list.append({
-                    'date': date_str,
-                    'collection_time': f"{date_str} 08:30",
-                    'search_scope': '上海范围内公务员、事业编、国企相关招聘信息',
-                    'total_jobs': 10,
-                    'gwy_count': 0,
-                    'sy_count': 7,
-                    'gq_count': 3
-                })
+            print(f"处理文件: {md_file.name} (日期: {date_str})")
+            
+            # 解析日报
+            data = parse_markdown_report(md_file)
+            
+            # 设置日期（如果没有从文件中提取到）
+            if not data['date']:
+                data['date'] = date_str
+            
+            # 保存数据
+            all_data.append(data)
+            
+            # 检查是否为最新（按日期排序）
+            if latest_date is None or date_str > latest_date:
+                latest_date = date_str
+                latest_data = data
+    
+    if not all_data:
+        print("错误: 未能解析任何日报文件")
+        return
+    
+    # 确保有最新数据
+    if latest_data is None:
+        latest_data = all_data[0]
+        latest_date = latest_data['date']
+    
+    print(f"最新日报日期: {latest_date}")
+    
+    # 为每个日报生成HTML文件
+    for data in all_data:
+        output_file = PUBLIC_DIR / f"{data['date']}.html"
+        generate_html(data, output_file, TEMPLATE_FILE)
+        print(f"生成日报: {output_file}")
+    
+    # 生成今日的latest.html（指向最新日报）
+    latest_html = PUBLIC_DIR / "latest.html"
+    latest_output_file = PUBLIC_DIR / f"{latest_date}.html"
+    if latest_output_file.exists():
+        shutil.copy2(latest_output_file, latest_html)
+        print(f"创建latest.html -> {latest_date}.html")
+    
+    # 准备索引数据
+    data_list = []
+    for data in all_data:
+        data_list.append({
+            'date': data['date'],
+            'collection_time': data.get('collection_time', f"{data['date']} 08:30"),
+            'search_scope': data.get('search_scope', '上海范围内公务员、事业编、国企相关招聘信息'),
+            'total_jobs': data.get('total_jobs', 0),
+            'gwy_count': data.get('gwy_count', 0),
+            'sy_count': data.get('sy_count', 0),
+            'gq_count': data.get('gq_count', 0)
+        })
     
     # 按日期排序（最新的在前）
     data_list.sort(key=lambda x: x['date'], reverse=True)

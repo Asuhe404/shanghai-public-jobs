@@ -16,6 +16,9 @@ from typing import Dict, List, Any, Optional
 def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
     """
     解析Markdown格式的日报，提取结构化信息
+    支持两种格式：
+    1. 新格式（标准模板）
+    2. 旧格式（带**粗体**和嵌套分类统计）
     """
     content = md_path.read_text(encoding='utf-8')
     
@@ -45,101 +48,164 @@ def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
     lines = content.split('\n')
     current_section = None
     current_category = None
+    in_category_stats = False  # 标记是否在"分类统计:"子项中
     
     for i, line in enumerate(lines):
-        line = line.strip()
+        # 清理行：去除粗体标记和首尾空格
+        line_clean = line.strip()
+        # 去除**标记
+        line_clean = line_clean.replace('**', '')
         
-        # 提取采集时间
-        if '采集时间:' in line:
-            result['collection_time'] = line.replace('采集时间:', '').strip()
+        # 跳过空行
+        if not line_clean:
+            continue
+        
+        # 提取采集时间（支持"采集时间:"和"**采集时间:**"格式）
+        if '采集时间:' in line_clean:
+            # 提取冒号后的内容
+            parts = line_clean.split('采集时间:', 1)
+            if len(parts) > 1:
+                result['collection_time'] = parts[1].strip()
+            continue
         
         # 提取检索范围
-        if '检索范围:' in line:
-            result['search_scope'] = line.replace('检索范围:', '').strip()
+        if '检索范围:' in line_clean:
+            parts = line_clean.split('检索范围:', 1)
+            if len(parts) > 1:
+                result['search_scope'] = parts[1].strip()
+            continue
         
         # 提取总体汇总
-        if '总体汇总' in line:
+        if '总体汇总' in line_clean:
             current_section = 'summary'
             continue
         
         if current_section == 'summary':
-            if '今日发现招聘信息:' in line:
-                match = re.search(r'(\d+)条', line)
-                if match:
-                    result['total_jobs'] = int(match.group(1))
-            elif '公务员:' in line:
-                match = re.search(r'(\d+)条', line)
-                if match:
-                    result['gwy_count'] = int(match.group(1))
-            elif '事业编:' in line:
-                match = re.search(r'(\d+)条', line)
-                if match:
-                    result['sy_count'] = int(match.group(1))
-            elif '国企:' in line:
-                match = re.search(r'(\d+)条', line)
-                if match:
-                    result['gq_count'] = int(match.group(1))
-            elif '最值得关注的3条:' in line:
+            # 检查是否进入"分类统计:"子项
+            if '分类统计:' in line_clean:
+                in_category_stats = True
+                continue
+            
+            # 如果在分类统计子项中，检查缩进行
+            if in_category_stats and line_clean.startswith('- '):
+                # 提取分类统计行
+                if '公务员:' in line_clean:
+                    match = re.search(r'(\d+)条', line_clean)
+                    if match:
+                        result['gwy_count'] = int(match.group(1))
+                elif '事业编:' in line_clean:
+                    match = re.search(r'(\d+)条', line_clean)
+                    if match:
+                        result['sy_count'] = int(match.group(1))
+                elif '国企:' in line_clean:
+                    match = re.search(r'(\d+)条', line_clean)
+                    if match:
+                        result['gq_count'] = int(match.group(1))
+                continue
+            elif line_clean.startswith('- ') and not in_category_stats:
+                # 标准格式：直接列出分类
+                if '公务员:' in line_clean:
+                    match = re.search(r'(\d+)条', line_clean)
+                    if match:
+                        result['gwy_count'] = int(match.group(1))
+                elif '事业编:' in line_clean:
+                    match = re.search(r'(\d+)条', line_clean)
+                    if match:
+                        result['sy_count'] = int(match.group(1))
+                elif '国企:' in line_clean:
+                    match = re.search(r'(\d+)条', line_clean)
+                    if match:
+                        result['gq_count'] = int(match.group(1))
+                elif '今日发现招聘信息:' in line_clean:
+                    match = re.search(r'(\d+)条', line_clean)
+                    if match:
+                        result['total_jobs'] = int(match.group(1))
+            
+            # 检查最值得关注的3条
+            if '最值得关注的3条:' in line_clean:
                 current_section = 'highlights'
+                in_category_stats = False  # 重置分类统计标记
                 continue
         
         # 提取重点招聘
         if current_section == 'highlights':
-            if line.startswith('1. ') or line.startswith('2. ') or line.startswith('3. '):
-                title = line[3:].split('（')[0].strip()
-                desc = ''
-                if '（' in line and '）' in line:
-                    desc = line[line.find('（')+1:line.find('）')]
-                result['highlights'].append({
-                    'title': title,
-                    'description': desc
-                })
+            # 匹配 "1. 标题 (描述)" 或 "1. 标题（描述）"
+            if line_clean.startswith('1. ') or line_clean.startswith('2. ') or line_clean.startswith('3. '):
+                # 提取标题和描述
+                line_text = line_clean[3:].strip()
+                
+                # 使用正则表达式提取标题和描述
+                # 匹配中文括号或英文括号
+                title_match = re.match(r'^(.*?)(?:\s*[（(](.*?)[）)])?$', line_text)
+                if title_match:
+                    title = title_match.group(1).strip()
+                    desc = title_match.group(2) if title_match.group(2) else ''
+                    result['highlights'].append({
+                        'title': title,
+                        'description': desc
+                    })
         
-        # 检测分类标题
-        if '国企招聘' in line and '条' in line:
+        # 检测分类标题（如"### 国企招聘 (4条)"）
+        if ('国企招聘' in line_clean and '条' in line_clean) or ('国企招聘' in line and '条' in line):
             current_category = 'gq'
             current_section = 'jobs'
             continue
-        elif '事业编招聘' in line and '条' in line:
+        elif ('事业编招聘' in line_clean and '条' in line_clean) or ('事业编招聘' in line and '条' in line):
             current_category = 'sy'
             current_section = 'jobs'
             continue
-        elif '公务员招聘' in line and '条' in line:
+        elif ('公务员招聘' in line_clean and '条' in line_clean) or ('公务员招聘' in line and '条' in line):
             current_category = 'gwy'
             current_section = 'jobs'
             continue
         
         # 解析具体招聘信息
-        if current_section == 'jobs' and current_category and line.startswith('1. '):
-            # 解析职位行
-            job_text = line[3:].strip()
-            
-            # 简单解析逻辑 - 实际应用中可能需要更复杂的解析
-            position = job_text.split(' - ')[0] if ' - ' in job_text else job_text
-            
-            # 提取单位（假设单位在开头）
-            unit_match = re.match(r'(.+?[区院校中心局部])', position)
-            unit = unit_match.group(1) if unit_match else '未知单位'
-            
-            job_data = {
-                'position': position,
-                'unit': unit,
-                'requirements': '详见官方公告',
-                'employment_type': '正式编制',
-                'benefits': '五险一金、带薪年假等',
-                'summary': '官方招聘信息，请及时报名',
-                'source': '上海市相关单位官网',
-                'source_url': '#'
-            }
-            
-            if current_category == 'gwy':
-                result['gwy_jobs'].append(job_data)
-            elif current_category == 'sy':
-                result['sy_jobs'].append(job_data)
-            elif current_category == 'gq':
-                result['gq_jobs'].append(job_data)
+        if current_section == 'jobs' and current_category:
+            # 匹配数字列表项（如"1. "开头）
+            if re.match(r'^\d+\.\s+', line_clean):
+                # 解析职位行
+                job_text = re.sub(r'^\d+\.\s+', '', line_clean).strip()
+                
+                # 提取职位标题（分隔符可能是" - "或" – "）
+                position = job_text
+                description = ''
+                if ' - ' in job_text:
+                    parts = job_text.split(' - ', 1)
+                    position = parts[0].strip()
+                    description = parts[1].strip()
+                elif ' – ' in job_text:
+                    parts = job_text.split(' – ', 1)
+                    position = parts[0].strip()
+                    description = parts[1].strip()
+                
+                # 提取单位（假设单位在开头）
+                unit_match = re.match(r'(.+?[区院校中心局部])', position)
+                unit = unit_match.group(1) if unit_match else '未知单位'
+                
+                job_data = {
+                    'position': position,
+                    'unit': unit,
+                    'requirements': '详见官方公告',
+                    'employment_type': '正式编制',
+                    'benefits': '五险一金、带薪年假等',
+                    'summary': description if description else '官方招聘信息，请及时报名',
+                    'source': '上海市相关单位官网',
+                    'source_url': '#'
+                }
+                
+                if current_category == 'gwy':
+                    result['gwy_jobs'].append(job_data)
+                elif current_category == 'sy':
+                    result['sy_jobs'].append(job_data)
+                elif current_category == 'gq':
+                    result['gq_jobs'].append(job_data)
     
     # 如果没有从内容中提取到数据，使用模拟数据
+    if result['total_jobs'] == 0:
+        # 尝试从分类计数推断总职位数
+        result['total_jobs'] = result['gwy_count'] + result['sy_count'] + result['gq_count']
+    
+    # 如果还是没有数据，使用模拟数据
     if result['total_jobs'] == 0:
         result['total_jobs'] = 14
         result['gwy_count'] = 0
@@ -211,94 +277,153 @@ def generate_html(data: Dict[str, Any], output_path: Path, template_file: Path) 
     html = template
     
     # 基本变量
-    html = html.replace('{{title}}', data['title'])
-    html = html.replace('{{date}}', data['date'])
-    html = html.replace('{{collection_time}}', data['collection_time'])
-    html = html.replace('{{search_scope}}', data['search_scope'])
+    html = html.replace('{{title}}', data.get('title', '上海公职招聘日报'))
+    html = html.replace('{{date}}', data.get('date', ''))
+    html = html.replace('{{collection_time}}', data.get('collection_time', ''))
+    html = html.replace('{{search_scope}}', data.get('search_scope', ''))
     html = html.replace('{{current_year}}', str(datetime.datetime.now().year))
     
     # 重点招聘
     highlights_html = ''
-    for highlight in data['highlights']:
+    for highlight in data.get('highlights', []):
         highlights_html += f"""
             <div class="job-item">
-                <div class="job-title">{highlight['title']}</div>
-                <div class="job-meta">{highlight['description']}</div>
+                <div class="job-title">{highlight.get('title', '')}</div>
+                <div class="job-meta">{highlight.get('description', '')}</div>
             </div>
         """
-    html = html.replace('{{#highlights}}', '').replace('{{/highlights}}', '')
-    html = html.replace('{{#highlights}}', '').replace('{{/highlights}}', '')
-    html = html.replace('{{#highlights}}', '').replace('{{/highlights}}', '')
-    html = html.replace(highlights_html, highlights_html)  # 保留占位
+    
+    # 替换重点招聘部分
+    start_tag = '{{#highlights}}'
+    end_tag = '{{/highlights}}'
+    if start_tag in html and end_tag in html:
+        start_pos = html.find(start_tag)
+        end_pos = html.find(end_tag) + len(end_tag)
+        # 获取start_tag和end_tag之间的原始内容
+        original_content = html[start_pos:end_pos]
+        # 用生成的HTML替换，但要保留模板中的内部结构标签
+        inner_start = html.find(start_tag) + len(start_tag)
+        inner_end = html.find(end_tag)
+        inner_content = html[inner_start:inner_end]
+        # 直接用highlights_html替换整个区域
+        html = html.replace(original_content, highlights_html)
     
     # 公务员招聘
     gwy_html = ''
-    for job in data['gwy_jobs']:
+    for job in data.get('gwy_jobs', []):
+        position = job.get('position', '')
+        unit = job.get('unit', '')
+        requirements = job.get('requirements', '')
+        employment_type = job.get('employment_type', '')
+        benefits = job.get('benefits', '')
+        summary = job.get('summary', '')
+        source = job.get('source', '')
+        source_url = job.get('source_url', '#')
+        
         gwy_html += f"""
-            <div class="job-item" data-category="公务员" data-title="{job['position']}" data-unit="{job['unit']}">
+            <div class="job-item" data-category="公务员" data-title="{position}" data-unit="{unit}">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
-                        <div class="job-title">{job['position']}</div>
+                        <div class="job-title">{position}</div>
                         <div class="job-meta">
-                            <i class="fas fa-building me-1"></i>{job['unit']}
-                            <i class="fas fa-user-check me-1"></i>{job['requirements']}
-                            <i class="fas fa-briefcase me-1"></i>{job['employment_type']}
+                            <i class="fas fa-building me-1"></i>{unit}
+                            {f'<i class="fas fa-user-check me-1"></i>{requirements}' if requirements else ''}
+                            {f'<i class="fas fa-briefcase me-1"></i>{employment_type}' if employment_type else ''}
                         </div>
-                        <div class="job-meta mt-1"><i class="fas fa-gift me-1"></i>{job['benefits']}</div>
-                        <div class="mt-2">{job['summary']}</div>
-                        <div class="mt-2"><a href="{job['source_url']}" class="source-link" target="_blank"><i class="fas fa-external-link-alt me-1"></i>{job['source']}</a></div>
+                        {f'<div class="job-meta mt-1"><i class="fas fa-gift me-1"></i>{benefits}</div>' if benefits else ''}
+                        {f'<div class="mt-2">{summary}</div>' if summary else ''}
+                        {f'<div class="mt-2"><a href="{source_url}" class="source-link" target="_blank"><i class="fas fa-external-link-alt me-1"></i>{source}</a></div>' if source else ''}
                     </div>
                 </div>
             </div>
         """
-    html = html.replace('{{#gwy_jobs}}', '').replace('{{/gwy_jobs}}', '')
-    html = html.replace(gwy_html, gwy_html)
+    
+    # 替换公务员招聘部分
+    start_tag = '{{#gwy_jobs}}'
+    end_tag = '{{/gwy_jobs}}'
+    if start_tag in html and end_tag in html:
+        start_pos = html.find(start_tag)
+        end_pos = html.find(end_tag) + len(end_tag)
+        original_content = html[start_pos:end_pos]
+        html = html.replace(original_content, gwy_html)
     
     # 事业编招聘
     sy_html = ''
-    for job in data['sy_jobs']:
+    for job in data.get('sy_jobs', []):
+        position = job.get('position', '')
+        unit = job.get('unit', '')
+        requirements = job.get('requirements', '')
+        employment_type = job.get('employment_type', '')
+        benefits = job.get('benefits', '')
+        summary = job.get('summary', '')
+        source = job.get('source', '')
+        source_url = job.get('source_url', '#')
+        
         sy_html += f"""
-            <div class="job-item" data-category="事业编" data-title="{job['position']}" data-unit="{job['unit']}">
+            <div class="job-item" data-category="事业编" data-title="{position}" data-unit="{unit}">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
-                        <div class="job-title">{job['position']}</div>
+                        <div class="job-title">{position}</div>
                         <div class="job-meta">
-                            <i class="fas fa-building me-1"></i>{job['unit']}
-                            <i class="fas fa-user-check me-1"></i>{job['requirements']}
-                            <i class="fas fa-briefcase me-1"></i>{job['employment_type']}
+                            <i class="fas fa-building me-1"></i>{unit}
+                            {f'<i class="fas fa-user-check me-1"></i>{requirements}' if requirements else ''}
+                            {f'<i class="fas fa-briefcase me-1"></i>{employment_type}' if employment_type else ''}
                         </div>
-                        <div class="job-meta mt-1"><i class="fas fa-gift me-1"></i>{job['benefits']}</div>
-                        <div class="mt-2">{job['summary']}</div>
-                        <div class="mt-2"><a href="{job['source_url']}" class="source-link" target="_blank"><i class="fas fa-external-link-alt me-1"></i>{job['source']}</a></div>
+                        {f'<div class="job-meta mt-1"><i class="fas fa-gift me-1"></i>{benefits}</div>' if benefits else ''}
+                        {f'<div class="mt-2">{summary}</div>' if summary else ''}
+                        {f'<div class="mt-2"><a href="{source_url}" class="source-link" target="_blank"><i class="fas fa-external-link-alt me-1"></i>{source}</a></div>' if source else ''}
                     </div>
                 </div>
             </div>
         """
-    html = html.replace('{{#sy_jobs}}', '').replace('{{/sy_jobs}}', '')
-    html = html.replace(sy_html, sy_html)
+    
+    # 替换事业编招聘部分
+    start_tag = '{{#sy_jobs}}'
+    end_tag = '{{/sy_jobs}}'
+    if start_tag in html and end_tag in html:
+        start_pos = html.find(start_tag)
+        end_pos = html.find(end_tag) + len(end_tag)
+        original_content = html[start_pos:end_pos]
+        html = html.replace(original_content, sy_html)
     
     # 国企招聘
     gq_html = ''
-    for job in data['gq_jobs']:
+    for job in data.get('gq_jobs', []):
+        position = job.get('position', '')
+        unit = job.get('unit', '')
+        requirements = job.get('requirements', '')
+        employment_type = job.get('employment_type', '')
+        benefits = job.get('benefits', '')
+        summary = job.get('summary', '')
+        source = job.get('source', '')
+        source_url = job.get('source_url', '#')
+        
         gq_html += f"""
-            <div class="job-item" data-category="国企" data-title="{job['position']}" data-unit="{job['unit']}">
+            <div class="job-item" data-category="国企" data-title="{position}" data-unit="{unit}">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
-                        <div class="job-title">{job['position']}</div>
+                        <div class="job-title">{position}</div>
                         <div class="job-meta">
-                            <i class="fas fa-building me-1"></i>{job['unit']}
-                            <i class="fas fa-user-check me-1"></i>{job['requirements']}
-                            <i class="fas fa-briefcase me-1"></i>{job['employment_type']}
+                            <i class="fas fa-building me-1"></i>{unit}
+                            {f'<i class="fas fa-user-check me-1"></i>{requirements}' if requirements else ''}
+                            {f'<i class="fas fa-briefcase me-1"></i>{employment_type}' if employment_type else ''}
                         </div>
-                        <div class="job-meta mt-1"><i class="fas fa-gift me-1"></i>{job['benefits']}</div>
-                        <div class="mt-2">{job['summary']}</div>
-                        <div class="mt-2"><a href="{job['source_url']}" class="source-link" target="_blank"><i class="fas fa-external-link-alt me-1"></i>{job['source']}</a></div>
+                        {f'<div class="job-meta mt-1"><i class="fas fa-gift me-1"></i>{benefits}</div>' if benefits else ''}
+                        {f'<div class="mt-2">{summary}</div>' if summary else ''}
+                        {f'<div class="mt-2"><a href="{source_url}" class="source-link" target="_blank"><i class="fas fa-external-link-alt me-1"></i>{source}</a></div>' if source else ''}
                     </div>
                 </div>
             </div>
         """
-    html = html.replace('{{#gq_jobs}}', '').replace('{{/gq_jobs}}', '')
-    html = html.replace(gq_html, gq_html)
+    
+    # 替换国企招聘部分
+    start_tag = '{{#gq_jobs}}'
+    end_tag = '{{/gq_jobs}}'
+    if start_tag in html and end_tag in html:
+        start_pos = html.find(start_tag)
+        end_pos = html.find(end_tag) + len(end_tag)
+        original_content = html[start_pos:end_pos]
+        html = html.replace(original_content, gq_html)
     
     # 写入文件
     output_path.write_text(html, encoding='utf-8')

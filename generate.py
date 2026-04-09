@@ -18,74 +18,59 @@ def get_job_source_info(position: str, unit: str, category: str) -> tuple:
     根据职位、单位和类别智能分配数据源和链接
     
     返回: (source, source_url)
+    
+    原则：
+    1. 使用权威官方门户网站，不使用可能不存在的具体页面
+    2. 对于不确定的具体单位链接，使用上级主管部门官网
+    3. 确保所有链接都是真实存在且权威的
     """
-    # 默认值
-    source = "官方公告"
+    # 默认值 - 使用权威官方门户
+    source = "相关单位官方网站"
     source_url = "#"
     
-    # 根据单位类型分配数据源
-    if "区" in unit and ("国企" in position or "国资" in position):
-        # 区属国企
-        source = f"{unit}国资委官网"
-        source_url = f"https://www.shanghai.gov.cn/search?q={position}"
-    elif "医院" in position:
-        # 医院招聘
-        source = "上海市卫健委官网"
-        source_url = "https://wsjkw.sh.gov.cn/"
-    elif "学校" in position or "学院" in position or "大学" in position:
-        # 学校招聘
-        source = "上海市教委官网"
-        source_url = "https://edu.sh.gov.cn/"
-    elif "博物馆" in position:
-        # 博物馆招聘
-        source = "上海市文旅局官网"
-        source_url = "https://whlyj.sh.gov.cn/"
-    elif "文化广场" in position:
-        # 文化单位招聘
-        source = "上海市文旅局官网"
-        source_url = "https://whlyj.sh.gov.cn/"
-    elif "同济医院" in position or "第六人民医院" in position:
-        # 具体医院
-        source = "医院官方网站"
-        if "同济医院" in position:
-            source_url = "https://www.tongjihospital.com.cn/"
-        elif "第六人民医院" in position:
-            source_url = "https://www.6thhosp.com/"
-    elif "上海政法学院" in position:
-        source = "上海政法学院官网"
-        source_url = "https://www.shupl.edu.cn/"
-    elif "上海对外经贸大学" in position:
-        source = "上海对外经贸大学官网"
-        source_url = "https://www.suibe.edu.cn/"
-    elif "上海博物馆" in position:
-        source = "上海博物馆官网"
-        source_url = "https://www.shanghaimuseum.net/"
-    elif "黄浦区" in position and "国企" in position:
-        source = "黄浦区国资委官网"
-        source_url = "https://www.huangpuqu.gov.cn/"
-    elif "普陀区" in position and "国企" in position:
-        source = "普陀区国资委官网"
-        source_url = "https://www.putuo.gov.cn/"
-    elif "嘉定区" in position and "国企" in position:
-        source = "嘉定区国资委官网"
-        source_url = "https://www.jiading.gov.cn/"
-    elif "骐骥春来" in position:
-        source = "上海国资国企校园招聘平台"
-        source_url = "https://www.shgzw.gov.cn/"
-    
-    # 根据类别调整
+    # 根据类别优先分配权威门户
     if category == "gwy":
+        # 公务员招聘
         source = "上海市公务员局官网"
         source_url = "https://www.shacs.gov.cn/"
+        return source, source_url
     elif category == "sy":
-        if source == "官方公告":
-            source = "上海市人社局官网"
-            source_url = "https://rsj.sh.gov.cn/"
+        # 事业编招聘
+        source = "上海市人社局官网"
+        source_url = "https://rsj.sh.gov.cn/"
+        
+        # 根据单位类型微调
+        if "医院" in position or "医院" in unit:
+            # 医疗卫生单位
+            source = "上海市卫健委官网"
+            source_url = "https://wsjkw.sh.gov.cn/"
+        elif "学校" in position or "学院" in position or "大学" in position or "学校" in unit:
+            # 教育单位
+            source = "上海市教委官网"
+            source_url = "https://edu.sh.gov.cn/"
+        elif "博物馆" in position or "文化" in position:
+            # 文化单位
+            source = "上海市文旅局官网"
+            source_url = "https://whlyj.sh.gov.cn/"
+            
+        return source, source_url
     elif category == "gq":
-        if source == "官方公告":
-            source = "上海市国资委官网"
+        # 国企招聘
+        source = "上海市国资委官网"
+        source_url = "https://www.shgzw.gov.cn/"
+        
+        # 区属国企使用更通用的门户
+        if "区" in unit and ("国企" in position or "国资" in position):
+            # 使用上海市政府门户搜索
+            source = "上海市政府官网"
+            source_url = f"https://www.shanghai.gov.cn/"
+        elif "骐骥春来" in position:
+            source = "上海国资国企校园招聘平台"
             source_url = "https://www.shgzw.gov.cn/"
+            
+        return source, source_url
     
+    # 如果未匹配任何类别，使用默认值
     return source, source_url
 
 def parse_markdown_report(md_path: Path) -> Dict[str, Any]:

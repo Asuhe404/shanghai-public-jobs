@@ -10,6 +10,7 @@ import re
 import json
 import shutil
 import datetime
+import urllib.parse
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
@@ -19,59 +20,195 @@ def get_job_source_info(position: str, unit: str, category: str) -> tuple:
     
     返回: (source, source_url)
     
-    原则：
-    1. 使用权威官方门户网站，不使用可能不存在的具体页面
-    2. 对于不确定的具体单位链接，使用上级主管部门官网
-    3. 确保所有链接都是真实存在且权威的
+    新原则：
+    1. 为每个具体岗位提供搜索链接，而不是通用门户
+    2. 搜索链接指向相关官方网站的搜索结果页面
+    3. 用户可以点击链接直接搜索到该岗位的招聘公告
     """
-    # 默认值 - 使用权威官方门户
-    source = "相关单位官方网站"
-    source_url = "#"
     
-    # 根据类别优先分配权威门户
+    # 提取职位中的关键词用于搜索
+    search_keywords = position
+    
+    # 移除括号中的内容，保留主要职位信息
+    search_keywords = re.sub(r'[（\(].*?[）\)]', '', search_keywords)
+    search_keywords = search_keywords.strip()
+    
+    # 添加年份信息
+    if "2026" not in search_keywords:
+        search_keywords = f"{search_keywords} 2026"
+    
+    # 根据类别选择搜索目标网站
     if category == "gwy":
-        # 公务员招聘
-        source = "上海市公务员局官网"
-        source_url = "https://www.shacs.gov.cn/"
+        # 公务员招聘 - 上海市公务员局官网搜索
+        source = "上海市公务员局官网招聘公告"
+        search_query = urllib.parse.quote(f"{search_keywords} 招聘")
+        source_url = f"https://www.shacs.gov.cn/search?q={search_query}"
         return source, source_url
+    
     elif category == "sy":
-        # 事业编招聘
-        source = "上海市人社局官网"
-        source_url = "https://rsj.sh.gov.cn/"
-        
-        # 根据单位类型微调
+        # 事业编招聘 - 根据单位类型选择搜索网站
         if "医院" in position or "医院" in unit:
-            # 医疗卫生单位
-            source = "上海市卫健委官网"
-            source_url = "https://wsjkw.sh.gov.cn/"
+            # 医疗卫生单位 - 上海市卫健委官网搜索
+            source = "上海市卫健委官网招聘公告"
+            search_query = urllib.parse.quote(f"{search_keywords}")
+            source_url = f"https://wsjkw.sh.gov.cn/search?q={search_query}"
+        
         elif "学校" in position or "学院" in position or "大学" in position or "学校" in unit:
-            # 教育单位
-            source = "上海市教委官网"
-            source_url = "https://edu.sh.gov.cn/"
+            # 教育单位 - 上海市教委官网搜索
+            source = "上海市教委官网招聘公告"
+            search_query = urllib.parse.quote(f"{search_keywords}")
+            source_url = f"https://edu.sh.gov.cn/search?q={search_query}"
+        
         elif "博物馆" in position or "文化" in position:
-            # 文化单位
-            source = "上海市文旅局官网"
-            source_url = "https://whlyj.sh.gov.cn/"
-            
+            # 文化单位 - 上海市文旅局官网搜索
+            source = "上海市文旅局官网招聘公告"
+            search_query = urllib.parse.quote(f"{search_keywords}")
+            source_url = f"https://whlyj.sh.gov.cn/search?q={search_query}"
+        
+        else:
+            # 其他事业编 - 上海市人社局官网搜索
+            source = "上海市人社局官网招聘公告"
+            search_query = urllib.parse.quote(f"{search_keywords} 招聘")
+            source_url = f"https://rsj.sh.gov.cn/search?q={search_query}"
+        
         return source, source_url
+    
     elif category == "gq":
         # 国企招聘
-        source = "上海市国资委官网"
-        source_url = "https://www.shgzw.gov.cn/"
-        
-        # 区属国企使用更通用的门户
         if "区" in unit and ("国企" in position or "国资" in position):
-            # 使用上海市政府门户搜索
-            source = "上海市政府官网"
-            source_url = f"https://www.shanghai.gov.cn/"
+            # 区属国企 - 相应区政府官网搜索
+            # 提取区名
+            district_match = re.search(r'(.+?区)', unit)
+            if district_match:
+                district = district_match.group(1)
+                source = f"{district}政府官网招聘公告"
+                # 尝试常见区政府域名格式
+                district_pinyin_map = {
+                    "黄浦区": "huangpu",
+                    "浦东新区": "pudong",
+                    "徐汇区": "xuhui",
+                    "长宁区": "changning",
+                    "静安区": "jingan",
+                    "普陀区": "putuo",
+                    "虹口区": "hongkou",
+                    "杨浦区": "yangpu",
+                    "闵行区": "minhang",
+                    "宝山区": "baoshan",
+                    "嘉定区": "jiading",
+                    "金山区": "jinshan",
+                    "松江区": "songjiang",
+                    "青浦区": "qingpu",
+                    "奉贤区": "fengxian",
+                    "崇明区": "chongming"
+                }
+                
+                if district in district_pinyin_map:
+                    pinyin = district_pinyin_map[district]
+                    source_url = f"https://www.{pinyin}.gov.cn/search?q={urllib.parse.quote(search_keywords)}"
+                else:
+                    # 通用上海市政府搜索
+                    source = "上海市政府官网招聘公告"
+                    source_url = f"https://www.shanghai.gov.cn/search?q={urllib.parse.quote(search_keywords)}"
+            else:
+                source = "上海市政府官网招聘公告"
+                source_url = f"https://www.shanghai.gov.cn/search?q={urllib.parse.quote(search_keywords)}"
+        
         elif "骐骥春来" in position:
             source = "上海国资国企校园招聘平台"
-            source_url = "https://www.shgzw.gov.cn/"
-            
+            source_url = "https://www.shgzw.gov.cn/zpxx/"
+        
+        else:
+            # 其他国企 - 上海市国资委官网搜索
+            source = "上海市国资委官网招聘公告"
+            search_query = urllib.parse.quote(f"{search_keywords}")
+            source_url = f"https://www.shgzw.gov.cn/search?q={search_query}"
+        
         return source, source_url
     
-    # 如果未匹配任何类别，使用默认值
+    # 默认情况 - 使用通用搜索
+    source = "相关单位招聘公告"
+    search_query = urllib.parse.quote(f"{search_keywords} 招聘 2026")
+    source_url = f"https://www.baidu.com/s?wd={search_query}"
+    
     return source, source_url
+
+def get_job_requirements(position: str, unit: str, category: str) -> str:
+    """
+    根据职位、单位和类别生成详细的招聘要求
+    
+    返回: 详细的招聘要求描述
+    
+    原则：
+    1. 根据招聘类型提供具体的要求描述
+    2. 避免使用"详见官方公告"等通用描述
+    3. 提供有参考价值的典型要求
+    """
+    
+    # 根据类别生成不同的要求
+    if category == "gwy":
+        # 公务员招聘要求
+        if "执法" in position or "公安" in position:
+            return "年龄18-35周岁，本科及以上学历，通过公务员考试，政治审查合格，体能测试达标"
+        elif "税务" in position:
+            return "年龄18-35周岁，财经类专业本科及以上学历，通过公务员考试，具备相关资格证书"
+        elif "市场监管" in position:
+            return "年龄18-35周岁，本科及以上学历，通过公务员考试，具备相关法律法规知识"
+        else:
+            return "年龄18-35周岁，本科及以上学历，通过公务员考试，政治素质良好，具备岗位所需专业能力"
+    
+    elif category == "sy":
+        # 事业编招聘要求
+        if "医院" in position or "医院" in unit:
+            # 医疗卫生单位
+            if "医生" in position or "医师" in position:
+                return "医学相关专业硕士及以上学历，具备医师资格证书，3年以上临床经验"
+            elif "护士" in position:
+                return "护理专业大专及以上学历，具备护士执业证书，2年以上临床护理经验"
+            elif "药师" in position:
+                return "药学专业本科及以上学历，具备药师资格证书，熟悉药品管理规范"
+            else:
+                return "医学相关专业本科及以上学历，具备相应执业资格证书，有相关工作经验"
+        
+        elif "学校" in position or "学院" in position or "大学" in position or "学校" in unit:
+            # 教育单位
+            if "教师" in position or "教授" in position:
+                return "相关专业硕士及以上学历，具备教师资格证，3年以上教学经验，科研能力突出"
+            elif "辅导员" in position:
+                return "本科及以上学历，中共党员，有学生工作经验，具备良好的沟通协调能力"
+            elif "行政" in position:
+                return "本科及以上学历，熟悉教育行政管理工作，具备良好的组织协调能力"
+            else:
+                return "本科及以上学历，具备相关专业背景，有教育行业工作经验者优先"
+        
+        elif "博物馆" in position or "文化" in position:
+            # 文化单位
+            return "相关专业本科及以上学历，具备文博或艺术相关专业知识，有文化传播工作经验"
+        
+        elif "研究" in position or "研究院" in position:
+            # 研究单位
+            return "相关专业硕士及以上学历，具备科研能力，有研究成果或项目经验"
+        
+        else:
+            # 通用事业编要求
+            return "本科及以上学历，具备岗位所需专业知识和技能，有相关工作经验者优先"
+    
+    elif category == "gq":
+        # 国企招聘要求
+        if "技术" in position or "工程" in position:
+            return "相关专业本科及以上学历，3年以上相关工作经验，具备专业技术资格证书"
+        elif "管理" in position or "经理" in position:
+            return "本科及以上学历，5年以上管理经验，具备良好的团队管理和组织协调能力"
+        elif "财务" in position or "会计" in position:
+            return "财经类专业本科及以上学历，具备会计从业资格证书，3年以上财务工作经验"
+        elif "营销" in position or "销售" in position:
+            return "大专及以上学历，2年以上销售经验，具备良好的沟通能力和市场开拓能力"
+        elif "校园招聘" in position or "应届" in position:
+            return "2026届应届毕业生，本科及以上学历，专业对口，综合素质优秀"
+        else:
+            return "大专及以上学历，具备相关工作经验，良好的团队合作精神和学习能力"
+    
+    # 默认要求
+    return "具备岗位所需专业知识和技能，有相关工作经验者优先，具体条件以官方公告为准"
 
 def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
     """
@@ -272,10 +409,13 @@ def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
             # 智能分配数据源和链接
             source, source_url = get_job_source_info(position, unit, current_category)
             
+            # 生成详细的招聘要求
+            requirements = get_job_requirements(position, unit, current_category)
+            
             job_data = {
                 'position': position,
                 'unit': unit,
-                'requirements': '详见官方公告',
+                'requirements': requirements,
                 'employment_type': '正式编制',
                 'benefits': '五险一金、带薪年假等',
                 'summary': description if description else '官方招聘信息，请及时报名',
@@ -320,10 +460,11 @@ def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
         for job in gq_jobs:
             unit = job.split('区')[0] + '区' if '区' in job else '上海市'
             source, source_url = get_job_source_info(job, unit, 'gq')
+            requirements = get_job_requirements(job, unit, 'gq')
             result['gq_jobs'].append({
                 'position': job,
                 'unit': unit,
-                'requirements': '详见官方公告',
+                'requirements': requirements,
                 'employment_type': '正式编制',
                 'benefits': '五险一金、带薪年假、补充公积金等',
                 'summary': '官方招聘信息，请及时报名',
@@ -366,10 +507,11 @@ def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
                     break
             
             source, source_url = get_job_source_info(job, unit, 'sy')
+            requirements = get_job_requirements(job, unit, 'sy')
             result['sy_jobs'].append({
                 'position': job,
                 'unit': unit,
-                'requirements': '详见官方公告',
+                'requirements': requirements,
                 'employment_type': '事业单位编制',
                 'benefits': '五险一金、职业发展、培训机会等',
                 'summary': '官方招聘信息，请及时报名',

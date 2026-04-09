@@ -46,7 +46,7 @@ jobs:
       - name: 生成静态网站
         run: |
           cd web
-    python3 generate.py
+          python3 generate.py
           echo "网站生成完成"
           
       - name: 配置Git用户

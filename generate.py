@@ -13,16 +13,6 @@ import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
-# 路径配置
-WORKSPACE_DIR = Path("/home/ubuntu/.openclaw/workspace")
-REPORTS_DIR = WORKSPACE_DIR / "reports" / "shanghai-public-jobs"
-WEB_DIR = WORKSPACE_DIR / "web"
-PUBLIC_DIR = WEB_DIR / "public"
-TEMPLATE_FILE = WEB_DIR / "template.html"
-
-# 确保目录存在
-PUBLIC_DIR.mkdir(exist_ok=True, parents=True)
-
 def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
     """
     解析Markdown格式的日报，提取结构化信息

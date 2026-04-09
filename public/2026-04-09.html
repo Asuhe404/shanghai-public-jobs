@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>上海公职招聘日报 - 上海公职招聘日报</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --accent-color: #e74c3c;
+            --light-bg: #f8f9fa;
+            --border-color: #dee2e6;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background-color: var(--light-bg);
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.5rem;
+        }
+        
+        .date-badge {
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+        
+        .report-card {
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: white;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-bottom: 20px;
+        }
+        
+        .report-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .category-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-right: 8px;
+            margin-bottom: 5px;
+        }
+        
+        .badge-gw {
+            background-color: #27ae60;
+            color: white;
+        }
+        
+        .badge-sy {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .badge-gq {
+            background-color: #9b59b6;
+            color: white;
+        }
+        
+        .search-box {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        
+        .filters {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+        }
+        
+        .stats-card {
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px;
+            background: white;
+            border: 1px solid var(--border-color);
+        }
+        
+        .stats-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--secondary-color);
+        }
+        
+        .job-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .job-item:last-child {
+            border-bottom: none;
+        }
+        
+        .job-title {
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+        
+        .job-meta {
+            font-size: 0.9rem;
+            color: #666;
+        }
+        
+        .source-link {
+            color: var(--secondary-color);
+            text-decoration: none;
+        }
+        
+        .source-link:hover {
+            text-decoration: underline;
+        }
+        
+        .footer {
+            margin-top: 50px;
+            padding: 20px 0;
+            background-color: var(--primary-color);
+            color: white;
+            text-align: center;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 50px 20px;
+            color: #666;
+        }
+        
+        .empty-state i {
+            font-size: 3rem;
+            color: #ccc;
+            margin-bottom: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding-left: 15px;
+                padding-right: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: var(--primary-color);">
+        <div class="container">
+            <a class="navbar-brand" href="index.html">
+                <i class="fas fa-briefcase me-2"></i>上海公职招聘日报
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="index.html">首页</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#about">关于</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="https://github.com/Asuhe404/shanghai-public-jobs" target="_blank">
+                            <i class="fab fa-github"></i> GitHub
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容区 -->
+    <div class="container mt-4">
+        <!-- 标题和日期 -->
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <h1 class="mb-2">上海公职招聘日报</h1>
+                <p class="text-muted">
+                    <i class="fas fa-calendar-alt me-2"></i>采集时间: 
+                    <span class="ms-3"><i class="fas fa-search me-2"></i>检索范围: </span>
+                </p>
+            </div>
+            <div class="col-md-4 text-md-end">
+                <div class="date-badge d-inline-block">
+                    <i class="fas fa-clock me-2"></i>2026-04-09
+                </div>
+            </div>
+        </div>
+
+        <!-- 搜索和筛选 -->
+        <div class="filters">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="search-box">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-search"></i></span>
+                            <input type="text" id="searchInput" class="form-control" placeholder="搜索职位、单位或关键词...">
+                            <button class="btn btn-outline-secondary" type="button" id="clearSearch">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="d-flex flex-wrap align-items-center justify-content-md-end mt-3 mt-md-0">
+                        <span class="me-3">筛选:</span>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input filter-check" type="checkbox" id="filterGwy" value="公务员" checked>
+                            <label class="form-check-label" for="filterGwy">
+                                <span class="category-badge badge-gw">公务员</span>
+                            </label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input filter-check" type="checkbox" id="filterSy" value="事业编" checked>
+                            <label class="form-check-label" for="filterSy">
+                                <span class="category-badge badge-sy">事业编</span>
+                            </label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input filter-check" type="checkbox" id="filterGq" value="国企" checked>
+                            <label class="form-check-label" for="filterGq">
+                                <span class="category-badge badge-gq">国企</span>
+                            </label>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary ms-3" id="resetFilters">
+                            <i class="fas fa-redo"></i> 重置
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 统计信息 -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="stats-number" id="totalJobs">0</div>
+                    <div>总招聘数</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="stats-number" id="gwyJobs">0</div>
+                    <div>公务员</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="stats-number" id="syJobs">0</div>
+                    <div>事业编</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="stats-number" id="gqJobs">0</div>
+                    <div>国企</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 重点招聘 -->
+        <div class="report-card p-4 mb-4">
+            <h3 class="mb-3"><i class="fas fa-star me-2 text-warning"></i>最值得关注</h3>
+            
+            <div class="job-item">
+                <div class="job-title">上海公职招聘日报</div>
+                <div class="job-meta">{{description}}</div>
+            </div>
+            
+        </div>
+
+        <!-- 招聘列表 -->
+        <div class="report-card p-4">
+            <h3 class="mb-3"><i class="fas fa-list me-2"></i>详细招聘信息</h3>
+            
+            <!-- 公务员 -->
+            <div class="mb-4" id="gwySection">
+                <h4 class="d-flex align-items-center">
+                    <span class="category-badge badge-gw me-2">公务员</span>
+                    <span>公务员招聘</span>
+                    <span class="badge bg-secondary ms-2" id="gwyCount">0</span>
+                </h4>
+                <div id="gwyJobsList">
+                    
+                    <div class="job-item" data-category="公务员" data-title="{{position}}" data-unit="{{unit}}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <div class="job-title">{{position}}</div>
+                                <div class="job-meta">
+                                    <i class="fas fa-building me-1"></i>{{unit}}
+                                    {{#requirements}} | <i class="fas fa-user-check me-1"></i>{{requirements}}{{/requirements}}
+                                    {{#employment_type}} | <i class="fas fa-briefcase me-1"></i>{{employment_type}}{{/employment_type}}
+                                </div>
+                                {{#benefits}}<div class="job-meta mt-1"><i class="fas fa-gift me-1"></i>{{benefits}}</div>{{/benefits}}
+                                {{#summary}}<div class="mt-2">{{summary}}</div>{{/summary}}
+                                {{#source}}<div class="mt-2"><a href="{{source_url}}" class="source-link" target="_blank"><i class="fas fa-external-link-alt me-1"></i>{{source}}</a></div>{{/source}}
+                            </div>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+            
+            <!-- 事业编 -->
+            <div class="mb-4" id="sySection">
+                <h4 class="d-flex align-items-center">
+                    <span class="category-badge badge-sy me-2">事业编</span>
+                    <span>事业编招聘</span>
+                    <span class="badge bg-secondary ms-2" id="syCount">0</span>
+                </h4>
+                <div id="syJobsList">
+                    
+                    <div class="job-item" data-category="事业编" data-title="{{position}}" data-unit="{{unit}}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <div class="job-title">{{position}}</div>
+                                <div class="job-meta">
+                                    <i class="fas fa-building me-1"></i>{{unit}}
+                                    {{#requirements}} | <i class="fas fa-user-check me-1"></i>{{requirements}}{{/requirements}}
+                                    {{#employment_type}} | <i class="fas fa-briefcase me-1"></i>{{employment_type}}{{/employment_type}}
+                                </div>
+                                {{#benefits}}<div class="job-meta mt-1"><i class="fas fa-gift me-1"></i>{{benefits}}</div>{{/benefits}}
+                                {{#summary}}<div class="mt-2">{{summary}}</div>{{/summary}}
+                                {{#source}}<div class="mt-2"><a href="{{source_url}}" class="source-link" target="_blank"><i class="fas fa-external-link-alt me-1"></i>{{source}}</a></div>{{/source}}
+                            </div>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+            
+            <!-- 国企 -->
+            <div class="mb-4" id="gqSection">
+                <h4 class="d-flex align-items-center">
+                    <span class="category-badge badge-gq me-2">国企</span>
+                    <span>国企招聘</span>
+                    <span class="badge bg-secondary ms-2" id="gqCount">0</span>
+                </h4>
+                <div id="gqJobsList">
+                    
+                    <div class="job-item" data-category="国企" data-title="{{position}}" data-unit="{{unit}}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <div class="job-title">{{position}}</div>
+                                <div class="job-meta">
+                                    <i class="fas fa-building me-1"></i>{{unit}}
+                                    {{#requirements}} | <i class="fas fa-user-check me-1"></i>{{requirements}}{{/requirements}}
+                                    {{#employment_type}} | <i class="fas fa-briefcase me-1"></i>{{employment_type}}{{/employment_type}}
+                                </div>
+                                {{#benefits}}<div class="job-meta mt-1"><i class="fas fa-gift me-1"></i>{{benefits}}</div>{{/benefits}}
+                                {{#summary}}<div class="mt-2">{{summary}}</div>{{/summary}}
+                                {{#source}}<div class="mt-2"><a href="{{source_url}}" class="source-link" target="_blank"><i class="fas fa-external-link-alt me-1"></i>{{source}}</a></div>{{/source}}
+                            </div>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+            
+            <!-- 空状态 -->
+            <div id="emptyState" class="empty-state" style="display: none;">
+                <i class="fas fa-search"></i>
+                <h4>未找到匹配的招聘信息</h4>
+                <p>尝试调整搜索关键词或筛选条件</p>
+            </div>
+        </div>
+
+        <!-- 关于 -->
+        <div class="report-card p-4 mt-4" id="about">
+            <h3 class="mb-3"><i class="fas fa-info-circle me-2"></i>关于本站</h3>
+            <p>本站每日自动收集上海地区公务员、事业单位、国有企业的最新招聘信息，并通过AI整理为结构化数据。</p>
+            <p>所有信息均来源于官方或权威渠道，包括政府官网、人社/招录官网、事业单位官方公告、上海国资系统和国企官网等。</p>
+            <p>本站为自动化项目，信息仅供参考，请以官方发布为准。</p>
+            <div class="mt-3">
+                <strong><i class="fas fa-sync-alt me-2"></i>更新频率:</strong> 每日08:30（北京时间）自动更新
+                <br>
+                <strong><i class="fas fa-code me-2"></i>项目源码:</strong> <a href="https://github.com/asuhe/shanghai-public-jobs" target="_blank">GitHub</a>
+                <br>
+                <strong><i class="fas fa-robot me-2"></i>技术支持:</strong> OpenClaw AI Agent
+            </div>
+        </div>
+    </div>
+
+    <!-- 页脚 -->
+    <div class="footer">
+        <div class="container">
+            <p>上海公职招聘日报 &copy; 2026 | 数据更新于 2026-04-09</p>
+            <p class="mb-0">
+                <small>
+                    免责声明: 本站为自动化信息聚合平台，不保证信息的完整性和准确性。
+                    求职者请务必访问官方渠道核实信息。
+                </small>
+            </p>
+        </div>
+    </div>
+
+    <!-- 脚本 -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 初始化数据
+        const jobData = {
+            gwy: [],
+            sy: [],
+            gq: []
+        };
+        
+        // 从页面提取数据
+        document.addEventListener('DOMContentLoaded', function() {
+            // 收集所有职位
+            document.querySelectorAll('.job-item').forEach(item => {
+                const category = item.getAttribute('data-category');
+                const title = item.getAttribute('data-title');
+                const unit = item.getAttribute('data-unit');
+                const element = item.cloneNode(true);
+                
+                if (category === '公务员') {
+                    jobData.gwy.push({
+                        element: element,
+                        title: title,
+                        unit: unit,
+                        text: element.textContent.toLowerCase()
+                    });
+                } else if (category === '事业编') {
+                    jobData.sy.push({
+                        element: element,
+                        title: title,
+                        unit: unit,
+                        text: element.textContent.toLowerCase()
+                    });
+                } else if (category === '国企') {
+                    jobData.gq.push({
+                        element: element,
+                        title: title,
+                        unit: unit,
+                        text: element.textContent.toLowerCase()
+                    });
+                }
+            });
+            
+            // 初始化统计
+            updateStats();
+            
+            // 搜索功能
+            document.getElementById('searchInput').addEventListener('input', function(e) {
+                filterJobs();
+            });
+            
+            // 清除搜索
+            document.getElementById('clearSearch').addEventListener('click', function() {
+                document.getElementById('searchInput').value = '';
+                filterJobs();
+            });
+            
+            // 筛选功能
+            document.querySelectorAll('.filter-check').forEach(checkbox => {
+                checkbox.addEventListener('change', filterJobs);
+            });
+            
+            // 重置筛选
+            document.getElementById('resetFilters').addEventListener('click', function() {
+                document.getElementById('searchInput').value = '';
+                document.querySelectorAll('.filter-check').forEach(cb => cb.checked = true);
+                filterJobs();
+            });
+            
+            // 初始筛选
+            filterJobs();
+        });
+        
+        function filterJobs() {
+            const searchText = document.getElementById('searchInput').value.toLowerCase();
+            const showGwy = document.getElementById('filterGwy').checked;
+            const showSy = document.getElementById('filterSy').checked;
+            const showGq = document.getElementById('filterGq').checked;
+            
+            let visibleCount = 0;
+            
+            // 筛选每个类别
+            filterCategory('gwy', 'gwyJobsList', 'gwyCount', showGwy, searchText);
+            filterCategory('sy', 'syJobsList', 'syCount', showSy, searchText);
+            filterCategory('gq', 'gqJobsList', 'gqCount', showGq, searchText);
+            
+            // 更新可见性
+            document.getElementById('gwySection').style.display = showGwy ? 'block' : 'none';
+            document.getElementById('sySection').style.display = showSy ? 'block' : 'none';
+            document.getElementById('gqSection').style.display = showGq ? 'block' : 'none';
+            
+            // 更新总数
+            visibleCount = 
+                (showGwy ? jobData.gwy.filter(j => j.visible).length : 0) +
+                (showSy ? jobData.sy.filter(j => j.visible).length : 0) +
+                (showGq ? jobData.gq.filter(j => j.visible).length : 0);
+            
+            // 显示/隐藏空状态
+            const emptyState = document.getElementById('emptyState');
+            if (visibleCount === 0) {
+                emptyState.style.display = 'block';
+            } else {
+                emptyState.style.display = 'none';
+            }
+            
+            updateStats();
+        }
+        
+        function filterCategory(categoryKey, listId, countId, showCategory, searchText) {
+            const listElement = document.getElementById(listId);
+            const jobs = jobData[categoryKey];
+            let visibleInCategory = 0;
+            
+            // 清空列表
+            listElement.innerHTML = '';
+            
+            jobs.forEach(job => {
+                // 检查搜索词
+                const matchesSearch = searchText === '' || 
+                    job.text.includes(searchText) || 
+                    job.title.toLowerCase().includes(searchText) ||
+                    job.unit.toLowerCase().includes(searchText);
+                
+                job.visible = matchesSearch && showCategory;
+                
+                if (job.visible) {
+                    listElement.appendChild(job.element.cloneNode(true));
+                    visibleInCategory++;
+                }
+            });
+            
+            // 更新计数
+            document.getElementById(countId).textContent = visibleInCategory;
+        }
+        
+        function updateStats() {
+            const gwyCount = jobData.gwy.filter(j => j.visible).length;
+            const syCount = jobData.sy.filter(j => j.visible).length;
+            const gqCount = jobData.gq.filter(j => j.visible).length;
+            const total = gwyCount + syCount + gqCount;
+            
+            document.getElementById('totalJobs').textContent = total;
+            document.getElementById('gwyJobs').textContent = gwyCount;
+            document.getElementById('syJobs').textContent = syCount;
+            document.getElementById('gqJobs').textContent = gqCount;
+        }
+    </script>
+</body>
+</html>

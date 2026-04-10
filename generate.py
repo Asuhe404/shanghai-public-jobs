@@ -341,10 +341,12 @@ def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
                 if title_match:
                     title = title_match.group(1).strip()
                     desc = title_match.group(2) if title_match.group(2) else ''
-                    result['highlights'].append({
-                        'title': title,
-                        'description': desc
-                    })
+                    # 过滤“无/暂无”等无效高亮项
+                    if title not in {'无', '暂无', '无新增'}:
+                        result['highlights'].append({
+                            'title': title,
+                            'description': desc
+                        })
         
         # 5. 检测招聘分类标题
         if line_stripped.startswith('### '):
@@ -806,6 +808,73 @@ def update_index(data_list: List[Dict[str, Any]], public_dir: Path) -> None:
     index_path.write_text(index_html, encoding='utf-8')
     print(f"已更新索引文件: {index_path}")
 
+def validate_site_output(public_dir: Path, latest_data: Dict[str, Any]) -> None:
+    """
+    发布后自检（本地生成阶段）
+    检查：
+    1. 当天页面存在
+    2. latest.html 指向当天
+    3. 首页包含当天链接
+    4. 统计数字与数据一致
+    5. 0 条时显示空状态，而不是旧演示数据
+    """
+    latest_date = latest_data.get('date', '')
+    if not latest_date:
+        raise RuntimeError('自检失败：latest_data 缺少 date')
+
+    latest_page = public_dir / f"{latest_date}.html"
+    latest_alias = public_dir / "latest.html"
+    index_path = public_dir / "index.html"
+
+    if not latest_page.exists():
+        raise RuntimeError(f'自检失败：缺少当天页面 {latest_page}')
+    if not latest_alias.exists():
+        raise RuntimeError(f'自检失败：缺少 latest.html')
+    if not index_path.exists():
+        raise RuntimeError(f'自检失败：缺少首页 index.html')
+
+    latest_alias_text = latest_alias.read_text(encoding='utf-8')
+    page_text = latest_page.read_text(encoding='utf-8')
+    index_text = index_path.read_text(encoding='utf-8')
+
+    # latest.html 当前是直接复制当天详情页，而不是跳转壳文件；
+    # 因此应校验其内容是否与当天页面一致，而不是要求它包含“2026-xx-xx.html”字符串。
+    if latest_alias_text != page_text:
+        raise RuntimeError(f'自检失败：latest.html 内容与 {latest_date}.html 不一致')
+
+    if f'{latest_date}.html' not in index_text:
+        raise RuntimeError(f'自检失败：首页未包含 {latest_date}.html 链接')
+
+    expected_stats = {
+        'totalJobs': latest_data.get('total_jobs', 0),
+        'gwyJobs': latest_data.get('gwy_count', 0),
+        'syJobs': latest_data.get('sy_count', 0),
+        'gqJobs': latest_data.get('gq_count', 0),
+    }
+    for element_id, value in expected_stats.items():
+        expected_fragment = f'id="{element_id}">{value}</div>'
+        if expected_fragment not in page_text:
+            raise RuntimeError(f'自检失败：{element_id} 未正确显示为 {value}')
+
+    total_jobs = latest_data.get('total_jobs', 0)
+    if total_jobs == 0:
+        if '今日未发现符合条件且可验证的新招聘信息' not in page_text:
+            raise RuntimeError('自检失败：0 条结果页面缺少明确空状态提示')
+        if '今日事业编暂无新增岗位。' not in page_text:
+            raise RuntimeError('自检失败：0 条结果页面缺少分类空状态文案')
+        # 防止旧演示数据回流
+        forbidden_markers = [
+            '黄浦区15家区属国企春季招聘',
+            '骐骥春来上海国资国企2026年春季校园招聘',
+            '上海政法学院2026年公开招聘公告（第二批）',
+        ]
+        for marker in forbidden_markers:
+            if marker in page_text:
+                raise RuntimeError(f'自检失败：0 条结果页面仍出现旧演示数据：{marker}')
+
+    print('发布后自检通过')
+
+
 def copy_static_files() -> None:
     """
     复制静态文件（CSS、JS、图片等）
@@ -952,6 +1021,9 @@ def main():
     
     # 更新索引
     update_index(data_list, PUBLIC_DIR)
+
+    # 发布后自检
+    validate_site_output(PUBLIC_DIR, latest_data)
     
     # 复制静态文件
     copy_static_files()

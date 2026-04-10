@@ -231,7 +231,8 @@ def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
         'gwy_jobs': [],
         'sy_jobs': [],
         'gq_jobs': [],
-        'source_file': md_path.name
+        'source_file': md_path.name,
+        'explicit_no_results': False,
     }
     
     # 提取日期（从文件名）
@@ -270,6 +271,11 @@ def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
                 result['search_scope'] = parts[1].strip()
             continue
         
+        # 显式空结果：日报明确写了“未发现符合条件且可验证的新招聘信息”
+        if '未发现符合条件且可验证的新招聘信息' in line_stripped:
+            result['explicit_no_results'] = True
+            continue
+
         # 3. 检测总体汇总部分
         if '总体汇总' in line_stripped:
             in_summary = True
@@ -311,7 +317,7 @@ def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
                 continue
             
             # 如果不是分类统计子项，检查总职位数
-            if clean_line.startswith('- ') and '今日发现招聘信息:' in clean_line:
+            if clean_line.startswith('- ') and ('今日发现招聘信息:' in clean_line or '今日发现:' in clean_line):
                 match = re.search(r'(\d+)条', clean_line)
                 if match:
                     result['total_jobs'] = int(match.group(1))
@@ -434,91 +440,22 @@ def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
     # 如果总职位数为0但分类计数有值，计算总和
     if result['total_jobs'] == 0:
         result['total_jobs'] = result['gwy_count'] + result['sy_count'] + result['gq_count']
-    
-    # 如果还是没有数据，使用模拟数据
-    if result['total_jobs'] == 0:
-        result['total_jobs'] = 14
+
+    # 如果日报明确说明“今日无新增”，保留空结果，不再回退到演示数据
+    if result['explicit_no_results']:
+        result['total_jobs'] = 0
         result['gwy_count'] = 0
-        result['sy_count'] = 10
-        result['gq_count'] = 4
-        
-        # 模拟重点招聘
-        result['highlights'] = [
-            {'title': '黄浦区15家区属国企春季招聘', 'description': '4月7日发布，国企正式编制'},
-            {'title': '"骐骥春来"上海国资国企2026年春季校园招聘', 'description': '提供近7000个招聘需求'},
-            {'title': '上海政法学院2026年公开招聘公告（第二批）', 'description': '4月7日发布，事业单位编制'}
-        ]
-        
-        # 模拟国企招聘
-        gq_jobs = [
-            '黄浦区15家区属国企春季招聘',
-            '普陀区属国有企业公开招聘',
-            '嘉定区区属国有企业春季招聘',
-            '"骐骥春来"上海国资国企2026年春季校园招聘'
-        ]
-        
-        for job in gq_jobs:
-            unit = job.split('区')[0] + '区' if '区' in job else '上海市'
-            source, source_url = get_job_source_info(job, unit, 'gq')
-            requirements = get_job_requirements(job, unit, 'gq')
-            result['gq_jobs'].append({
-                'position': job,
-                'unit': unit,
-                'requirements': requirements,
-                'employment_type': '正式编制',
-                'benefits': '五险一金、带薪年假、补充公积金等',
-                'summary': '官方招聘信息，请及时报名',
-                'source': source,
-                'source_url': source_url
-            })
-        
-        # 模拟事业编招聘
-        sy_jobs = [
-            '上海政法学院2026年公开招聘公告（第二批）',
-            '上海文化广场2026年第二季度公开招聘工作人员公告',
-            '上海市同济医院公开招聘工作人员公告',
-            '上海市第六人民医院公开招聘工作人员公告',
-            '上海市贸易技术学校2026年公开招聘公告',
-            '上海市贸易学校2026年公开招聘公告',
-            '上海对外经贸大学2026年辅导员招聘公告',
-            '上海市工业技术学校工作人员公开招聘公告（2026年）',
-            '上海博物馆2026年博士后招聘简章',
-            '上海博物馆2026年公开招聘辅助人员（非事业编）公告'
-        ]
-        
-        for job in sy_jobs:
-            # 提取单位
-            unit = '未知单位'
-            unit_patterns = [
-                r'^(.+?区)',
-                r'^(.+?市)',
-                r'^(.+?大学)',
-                r'^(.+?学院)',
-                r'^(.+?医院)',
-                r'^(.+?学校)',
-                r'^(.+?中心)',
-                r'^(.+?局)',
-                r'^(.+?部)'
+        result['sy_count'] = 0
+        result['gq_count'] = 0
+        result['gwy_jobs'] = []
+        result['sy_jobs'] = []
+        result['gq_jobs'] = []
+        if not result['highlights']:
+            result['highlights'] = [
+                {'title': '今日未发现符合条件且可验证的新招聘信息', 'description': '已完成官方/权威渠道检索'}
             ]
-            for pattern in unit_patterns:
-                match = re.match(pattern, job)
-                if match:
-                    unit = match.group(1)
-                    break
-            
-            source, source_url = get_job_source_info(job, unit, 'sy')
-            requirements = get_job_requirements(job, unit, 'sy')
-            result['sy_jobs'].append({
-                'position': job,
-                'unit': unit,
-                'requirements': requirements,
-                'employment_type': '事业单位编制',
-                'benefits': '五险一金、职业发展、培训机会等',
-                'summary': '官方招聘信息，请及时报名',
-                'source': source,
-                'source_url': source_url
-            })
-    
+
+    # 注意：这里不再使用任何模拟/演示数据回退，避免 0 条结果被错误显示成旧样例
     return result
 
 def generate_html(data: Dict[str, Any], output_path: Path, template_file: Path) -> None:
@@ -561,6 +498,14 @@ def generate_html(data: Dict[str, Any], output_path: Path, template_file: Path) 
             <div class="job-item">
                 <div class="job-title">{highlight.get('title', '')}</div>
                 <div class="job-meta">{highlight.get('description', '')}</div>
+            </div>
+        """
+    
+    if not highlights_html and total_jobs == 0:
+        highlights_html = """
+            <div class="job-item">
+                <div class="job-title">今日未发现符合条件且可验证的新招聘信息</div>
+                <div class="job-meta">已完成官方/权威渠道检索，建议明日继续关注。</div>
             </div>
         """
     
@@ -609,6 +554,9 @@ def generate_html(data: Dict[str, Any], output_path: Path, template_file: Path) 
             </div>
         """
     
+    if not gwy_html and total_jobs == 0:
+        gwy_html = '<div class="text-muted py-2">今日公务员暂无新增岗位。</div>'
+
     # 替换公务员招聘部分
     start_tag = '{{#gwy_jobs}}'
     end_tag = '{{/gwy_jobs}}'
@@ -648,6 +596,9 @@ def generate_html(data: Dict[str, Any], output_path: Path, template_file: Path) 
             </div>
         """
     
+    if not sy_html and total_jobs == 0:
+        sy_html = '<div class="text-muted py-2">今日事业编暂无新增岗位。</div>'
+
     # 替换事业编招聘部分
     start_tag = '{{#sy_jobs}}'
     end_tag = '{{/sy_jobs}}'
@@ -687,6 +638,9 @@ def generate_html(data: Dict[str, Any], output_path: Path, template_file: Path) 
             </div>
         """
     
+    if not gq_html and total_jobs == 0:
+        gq_html = '<div class="text-muted py-2">今日国企暂无新增岗位。</div>'
+
     # 替换国企招聘部分
     start_tag = '{{#gq_jobs}}'
     end_tag = '{{/gq_jobs}}'
@@ -899,33 +853,47 @@ def main():
     # 确保public目录存在
     PUBLIC_DIR.mkdir(exist_ok=True, parents=True)
     
-    # 查找所有日报文件
-    md_files = list(REPORTS_DIR.glob("*.md"))
+    # 查找所有日报文件（递归），但排除 latest.md，避免同一天重复解析
+    md_files = [p for p in REPORTS_DIR.rglob("*.md") if p.name != "latest.md"]
     if not md_files:
-        # 尝试备用路径
-        alt_md = Path("reports/shanghai-public-jobs/*.md")
-        if any(alt_md.parent.glob("*.md")):
-            md_files = list(alt_md.parent.glob("*.md"))
-            REPORTS_DIR = alt_md.parent
+        # 尝试备用路径（递归）
+        alt_reports_dir = Path("reports/shanghai-public-jobs")
+        if alt_reports_dir.exists():
+            md_files = [p for p in alt_reports_dir.rglob("*.md") if p.name != "latest.md"]
+            REPORTS_DIR = alt_reports_dir
             print(f"使用备用路径: {REPORTS_DIR}")
         else:
             print(f"错误: 未找到日报文件: {REPORTS_DIR}")
             print(f"尝试查找路径: {REPORTS_DIR}")
             return
     
-    print(f"找到 {len(md_files)} 个日报文件")
+    print(f"找到 {len(md_files)} 个归档日报文件（递归扫描，不含 latest.md）")
+
+    # 按日期去重：同一天如果存在多个文件，优先选择最近修改的那个
+    files_by_date = {}
+    for md_file in md_files:
+        date_match = re.search(r'(\d{4}-\d{2}-\d{2})', md_file.name)
+        if not date_match:
+            continue
+        date_str = date_match.group(1)
+        prev = files_by_date.get(date_str)
+        if prev is None or md_file.stat().st_mtime > prev.stat().st_mtime:
+            files_by_date[date_str] = md_file
+
+    selected_files = [files_by_date[d] for d in sorted(files_by_date.keys())]
+    print(f"按日期去重后保留 {len(selected_files)} 个日报文件")
     
     # 解析所有日报文件并生成HTML
     all_data = []
     latest_date = None
     latest_data = None
     
-    for md_file in md_files:
+    for md_file in selected_files:
         # 从文件名提取日期（如2026-04-09.md）
         date_match = re.search(r'(\d{4}-\d{2}-\d{2})', md_file.name)
         if date_match:
             date_str = date_match.group(1)
-            print(f"处理文件: {md_file.name} (日期: {date_str})")
+            print(f"处理文件: {md_file} (日期: {date_str})")
             
             # 解析日报
             data = parse_markdown_report(md_file)

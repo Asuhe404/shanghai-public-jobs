@@ -13,10 +13,11 @@ REPO_URL="https://github.com/Asuhe404/shanghai-public-jobs.git"
 REPO_DIR="/tmp/shanghai-public-jobs-repo"
 BRANCH="main"
 WEB_DIR="/home/ubuntu/.openclaw/workspace/web"
-SOURCE_MD="/home/ubuntu/.openclaw/workspace/reports/shanghai-public-jobs/latest.md"
+REPORTS_DIR="/home/ubuntu/.openclaw/workspace/reports/shanghai-public-jobs"
+SOURCE_MD="$REPORTS_DIR/latest.md"
 TARGET_DIR="reports/shanghai-public-jobs"
 TARGET_JSON_DIR="$TARGET_DIR/json"
-LOCAL_PUBLIC_DATA_DIR="$WEB_DIR/public/data"
+LOCAL_CANONICAL_JSON_DIR="$REPORTS_DIR/json"
 
 # 检查源文件
 if [ ! -f "$SOURCE_MD" ]; then
@@ -83,17 +84,17 @@ echo "✓ 复制文件完成: $TARGET_DIR/latest.md, $TARGET_DIR/${DATE}.md"
 
 # 同步 canonical JSON 数据源到仓库，供后续构建优先使用
 mkdir -p "$TARGET_JSON_DIR"
-if [ -f "$LOCAL_PUBLIC_DATA_DIR/latest.json" ]; then
-    cp "$LOCAL_PUBLIC_DATA_DIR/latest.json" "$TARGET_JSON_DIR/latest.json"
+if [ -f "$LOCAL_CANONICAL_JSON_DIR/latest.json" ]; then
+    cp "$LOCAL_CANONICAL_JSON_DIR/latest.json" "$TARGET_JSON_DIR/latest.json"
 fi
-if [ -f "$LOCAL_PUBLIC_DATA_DIR/index.json" ]; then
-    cp "$LOCAL_PUBLIC_DATA_DIR/index.json" "$TARGET_JSON_DIR/index.json"
+if [ -f "$LOCAL_CANONICAL_JSON_DIR/index.json" ]; then
+    cp "$LOCAL_CANONICAL_JSON_DIR/index.json" "$TARGET_JSON_DIR/index.json"
 fi
-if [ -f "$LOCAL_PUBLIC_DATA_DIR/${DATE}.json" ]; then
-    cp "$LOCAL_PUBLIC_DATA_DIR/${DATE}.json" "$TARGET_JSON_DIR/${DATE}.json"
-    echo "✓ 已同步 JSON 数据源: $TARGET_JSON_DIR/${DATE}.json"
+if [ -f "$LOCAL_CANONICAL_JSON_DIR/${DATE}.json" ]; then
+    cp "$LOCAL_CANONICAL_JSON_DIR/${DATE}.json" "$TARGET_JSON_DIR/${DATE}.json"
+    echo "✓ 已同步 canonical JSON 数据源: $TARGET_JSON_DIR/${DATE}.json"
 else
-    echo "警告: 未找到当天 JSON 数据源: $LOCAL_PUBLIC_DATA_DIR/${DATE}.json"
+    echo "警告: 未找到当天 canonical JSON 数据源: $LOCAL_CANONICAL_JSON_DIR/${DATE}.json"
 fi
 
 # 配置Git用户

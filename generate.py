@@ -490,42 +490,52 @@ def load_report_data(md_file: Path, reports_dir: Path) -> Dict[str, Any]:
     return parse_markdown_report(md_file)
 
 
-def write_json_artifacts(all_data: List[Dict[str, Any]], latest_data: Dict[str, Any], public_dir: Path) -> None:
+def normalize_report_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        'schema_version': 1,
+        'title': data.get('title', '上海公职招聘日报'),
+        'date': data.get('date', ''),
+        'collection_time': data.get('collection_time', ''),
+        'search_scope': data.get('search_scope', ''),
+        'total_jobs': data.get('total_jobs', 0),
+        'gwy_count': data.get('gwy_count', 0),
+        'sy_count': data.get('sy_count', 0),
+        'gq_count': data.get('gq_count', 0),
+        'highlights': data.get('highlights', []),
+        'gwy_jobs': data.get('gwy_jobs', []),
+        'sy_jobs': data.get('sy_jobs', []),
+        'gq_jobs': data.get('gq_jobs', []),
+        'source_file': data.get('source_file', ''),
+        'explicit_no_results': data.get('explicit_no_results', False),
+    }
+
+
+def write_json_artifacts(all_data: List[Dict[str, Any]], latest_data: Dict[str, Any], public_dir: Path, reports_dir: Path) -> None:
     """
-    输出结构化 JSON 产物，作为后续 JSON 化改造的基础。
-    产物：
-    - public/data/YYYY-MM-DD.json
-    - public/data/latest.json
-    - public/data/index.json
+    输出结构化 JSON 产物。
+
+    两类产物：
+    1. 站点产物：public/data/*.json
+    2. canonical 源数据：reports/json/*.json
     """
-    data_dir = public_dir / 'data'
-    data_dir.mkdir(exist_ok=True, parents=True)
+    public_data_dir = public_dir / 'data'
+    public_data_dir.mkdir(exist_ok=True, parents=True)
+
+    canonical_data_dir = reports_dir / 'json'
+    canonical_data_dir.mkdir(exist_ok=True, parents=True)
 
     summaries = []
+    normalized_reports = []
     for data in all_data:
-        normalized = {
-            'schema_version': 1,
-            'title': data.get('title', '上海公职招聘日报'),
-            'date': data.get('date', ''),
-            'collection_time': data.get('collection_time', ''),
-            'search_scope': data.get('search_scope', ''),
-            'total_jobs': data.get('total_jobs', 0),
-            'gwy_count': data.get('gwy_count', 0),
-            'sy_count': data.get('sy_count', 0),
-            'gq_count': data.get('gq_count', 0),
-            'highlights': data.get('highlights', []),
-            'gwy_jobs': data.get('gwy_jobs', []),
-            'sy_jobs': data.get('sy_jobs', []),
-            'gq_jobs': data.get('gq_jobs', []),
-            'source_file': data.get('source_file', ''),
-            'explicit_no_results': data.get('explicit_no_results', False),
-        }
+        normalized = normalize_report_data(data)
+        normalized_reports.append(normalized)
         date_str = normalized.get('date', '')
         if date_str:
-            (data_dir / f'{date_str}.json').write_text(
-                json.dumps(normalized, ensure_ascii=False, indent=2),
-                encoding='utf-8'
-            )
+            for out_dir in (public_data_dir, canonical_data_dir):
+                (out_dir / f'{date_str}.json').write_text(
+                    json.dumps(normalized, ensure_ascii=False, indent=2),
+                    encoding='utf-8'
+                )
             summaries.append({
                 'date': date_str,
                 'collection_time': normalized.get('collection_time', ''),
@@ -540,24 +550,27 @@ def write_json_artifacts(all_data: List[Dict[str, Any]], latest_data: Dict[str, 
         'schema_version': 1,
         'generated_at': datetime.datetime.utcnow().isoformat() + 'Z',
         'latest_date': latest_data.get('date', ''),
-        'report': latest_data,
+        'report': normalize_report_data(latest_data),
     }
-    (data_dir / 'latest.json').write_text(
-        json.dumps(latest_payload, ensure_ascii=False, indent=2),
-        encoding='utf-8'
-    )
-
     index_payload = {
         'schema_version': 1,
         'generated_at': datetime.datetime.utcnow().isoformat() + 'Z',
         'latest_date': latest_data.get('date', ''),
         'reports': sorted(summaries, key=lambda x: x['date'], reverse=True),
     }
-    (data_dir / 'index.json').write_text(
-        json.dumps(index_payload, ensure_ascii=False, indent=2),
-        encoding='utf-8'
-    )
-    print(f"已输出 JSON 数据产物: {data_dir}")
+
+    for out_dir in (public_data_dir, canonical_data_dir):
+        (out_dir / 'latest.json').write_text(
+            json.dumps(latest_payload, ensure_ascii=False, indent=2),
+            encoding='utf-8'
+        )
+        (out_dir / 'index.json').write_text(
+            json.dumps(index_payload, ensure_ascii=False, indent=2),
+            encoding='utf-8'
+        )
+
+    print(f"已输出站点 JSON 数据产物: {public_data_dir}")
+    print(f"已输出 canonical JSON 数据源: {canonical_data_dir}")
 
 
 def generate_html(data: Dict[str, Any], output_path: Path, template_file: Path) -> None:
@@ -1122,8 +1135,8 @@ def main():
     # 更新索引
     update_index(data_list, PUBLIC_DIR)
 
-    # 输出 JSON 数据产物（为后续 JSON 作为唯一真相源做准备）
-    write_json_artifacts(all_data, latest_data, PUBLIC_DIR)
+    # 输出 JSON 数据产物（站点 data + canonical 源数据）
+    write_json_artifacts(all_data, latest_data, PUBLIC_DIR, REPORTS_DIR)
 
     # 发布后自检
     validate_site_output(PUBLIC_DIR, latest_data)

@@ -23,13 +23,22 @@ fi
 
 echo "✓ 找到源日报文件: $SOURCE_MD"
 
-# 使用GitHub Token进行身份验证（如果设置了）
+# 使用 GitHub Token 进行身份验证
+# 优先级：环境变量 > 本机 secrets 文件
+TOKEN_FILE="/home/ubuntu/.openclaw/secrets/shanghai-public-jobs.token"
+
+if [ -z "$GITHUB_TOKEN" ] && [ -f "$TOKEN_FILE" ]; then
+    GITHUB_TOKEN="$(tr -d '\r\n' < "$TOKEN_FILE")"
+    echo "使用本机 secrets 文件中的 GITHUB_TOKEN"
+fi
+
 if [ -n "$GITHUB_TOKEN" ]; then
-    AUTH_REPO_URL="https://${GITHUB_TOKEN}@github.com/Asuhe404/shanghai-public-jobs.git"
-    echo "使用GITHUB_TOKEN进行身份验证"
+    # 使用 x-access-token 形式，兼容 GitHub PAT 的非交互 push
+    AUTH_REPO_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/Asuhe404/shanghai-public-jobs.git"
+    echo "使用 GITHUB_TOKEN 进行身份验证"
 else
     AUTH_REPO_URL="$REPO_URL"
-    echo "警告: 未设置GITHUB_TOKEN，使用公开仓库URL（可能需要手动身份验证）"
+    echo "警告: 未设置 GITHUB_TOKEN，使用公开仓库URL（可能需要手动身份验证）"
 fi
 
 # 清理并创建工作目录
@@ -40,6 +49,11 @@ cd "$REPO_DIR"
 # 克隆仓库
 echo "克隆仓库..."
 git clone --branch "$BRANCH" --depth 1 "$AUTH_REPO_URL" .
+
+# 确保 origin 使用带认证的 URL，避免 push 时退回到无认证地址
+if [ -n "$GITHUB_TOKEN" ]; then
+    git remote set-url origin "$AUTH_REPO_URL"
+fi
 
 # 创建目标目录
 mkdir -p "$TARGET_DIR"

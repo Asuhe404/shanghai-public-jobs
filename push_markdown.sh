@@ -27,15 +27,15 @@ fi
 
 echo "✓ 找到源日报文件: $SOURCE_MD"
 
-# 先在本地生成最新站点与 JSON 数据产物（兼容式 JSON-first）
-echo "本地生成站点与 JSON 数据产物..."
+# 先在本地导出 canonical JSON 数据源（网站构建职责留给 GitHub Actions）
+echo "本地导出 canonical JSON 数据源..."
 cd "$WEB_DIR"
-python3 generate.py >/tmp/shanghai-public-jobs-generate.log 2>&1 || {
-    echo "错误: 本地 generate.py 执行失败"
+python3 generate.py --export-canonical-json-only >/tmp/shanghai-public-jobs-generate.log 2>&1 || {
+    echo "错误: 本地 canonical JSON 导出失败"
     tail -80 /tmp/shanghai-public-jobs-generate.log || true
     exit 1
 }
-echo "✓ 本地站点与 JSON 数据产物生成完成"
+echo "✓ 本地 canonical JSON 数据源导出完成"
 
 # 使用 GitHub Token 进行身份验证
 # 优先级：环境变量 > 本机 secrets 文件

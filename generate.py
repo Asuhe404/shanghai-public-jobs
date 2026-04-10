@@ -10,9 +10,10 @@ import re
 import json
 import shutil
 import datetime
+import argparse
 import urllib.parse
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 
 def get_job_source_info(position: str, unit: str, category: str) -> tuple:
     """
@@ -461,31 +462,31 @@ def parse_markdown_report(md_path: Path) -> Dict[str, Any]:
     return result
 
 
-def load_report_data(md_file: Path, reports_dir: Path) -> Dict[str, Any]:
+def load_report_data(date_str: str, md_file: Optional[Path], reports_dir: Path) -> Dict[str, Any]:
     """
-    兼容式 JSON 化：
-    - 如果已经存在对应 JSON，则优先使用 JSON 作为数据源
-    - 否则退回解析 Markdown
-    这样后续可以逐步把“唯一真相源”从 Markdown 迁到 JSON。
+    按日期加载日报数据：
+    - 优先使用 canonical JSON (`reports/json/YYYY-MM-DD.json`)
+    - 若无 JSON，再回退到对应 Markdown
     """
-    date_match = re.search(r'(\d{4}-\d{2}-\d{2})', md_file.name)
-    date_str = date_match.group(1) if date_match else ''
-
     json_candidates = []
     if date_str:
         json_candidates.append(reports_dir / 'json' / f'{date_str}.json')
-    json_candidates.append(md_file.with_suffix('.json'))
+    if md_file is not None:
+        json_candidates.append(md_file.with_suffix('.json'))
 
     for json_path in json_candidates:
         if json_path.exists():
             try:
                 data = json.loads(json_path.read_text(encoding='utf-8'))
                 data.setdefault('date', date_str)
-                data.setdefault('source_file', md_file.name)
+                data.setdefault('source_file', md_file.name if md_file else json_path.name)
                 print(f"优先使用 JSON 数据源: {json_path}")
                 return data
             except Exception as e:
                 print(f"警告: JSON 读取失败，回退到 Markdown 解析: {json_path} ({e})")
+
+    if md_file is None:
+        raise FileNotFoundError(f'既没有 canonical JSON，也没有 Markdown：{date_str}')
 
     return parse_markdown_report(md_file)
 
@@ -921,6 +922,88 @@ def update_index(data_list: List[Dict[str, Any]], public_dir: Path) -> None:
     index_path.write_text(index_html, encoding='utf-8')
     print(f"已更新索引文件: {index_path}")
 
+def export_canonical_json_from_markdown(reports_dir: Path) -> Tuple[int, Path]:
+    """
+    只做一件事：从 reports 里的 Markdown 导出 canonical JSON 到 reports/json。
+    用于推送阶段，让“源数据准备”和“网站构建”职责分离。
+    """
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    canonical_dir = reports_dir / 'json'
+    canonical_dir.mkdir(parents=True, exist_ok=True)
+
+    md_files = [p for p in reports_dir.rglob('*.md') if p.name != 'latest.md']
+    md_by_date = {}
+    for md_file in md_files:
+        date_match = re.search(r'(\d{4}-\d{2}-\d{2})', md_file.name)
+        if not date_match:
+            continue
+        date_str = date_match.group(1)
+        prev = md_by_date.get(date_str)
+        if prev is None or md_file.stat().st_mtime > prev.stat().st_mtime:
+            md_by_date[date_str] = md_file
+
+    all_data = []
+    latest_data = None
+    latest_date = None
+    for date_str in sorted(md_by_date.keys()):
+        md_file = md_by_date[date_str]
+        data = parse_markdown_report(md_file)
+        if not data.get('date'):
+            data['date'] = date_str
+        all_data.append(data)
+        if latest_date is None or date_str > latest_date:
+            latest_date = date_str
+            latest_data = data
+
+    if not all_data or latest_data is None:
+        raise RuntimeError('未找到可导出的 Markdown 日报数据')
+
+    # 这里 public_dir 传一个临时无关目录即可，函数会同时写 public/data 和 reports/json。
+    # 为避免误生成整站页面，这里直接单独写 canonical 源数据。
+    summaries = []
+    for data in all_data:
+        normalized = normalize_report_data(data)
+        date_str = normalized.get('date', '')
+        if date_str:
+            (canonical_dir / f'{date_str}.json').write_text(
+                json.dumps(normalized, ensure_ascii=False, indent=2),
+                encoding='utf-8'
+            )
+            summaries.append({
+                'date': date_str,
+                'collection_time': normalized.get('collection_time', ''),
+                'search_scope': normalized.get('search_scope', ''),
+                'total_jobs': normalized.get('total_jobs', 0),
+                'gwy_count': normalized.get('gwy_count', 0),
+                'sy_count': normalized.get('sy_count', 0),
+                'gq_count': normalized.get('gq_count', 0),
+            })
+
+    latest_payload = {
+        'schema_version': 1,
+        'generated_at': datetime.datetime.utcnow().isoformat() + 'Z',
+        'latest_date': latest_data.get('date', ''),
+        'report': normalize_report_data(latest_data),
+    }
+    index_payload = {
+        'schema_version': 1,
+        'generated_at': datetime.datetime.utcnow().isoformat() + 'Z',
+        'latest_date': latest_data.get('date', ''),
+        'reports': sorted(summaries, key=lambda x: x['date'], reverse=True),
+    }
+    (canonical_dir / 'latest.json').write_text(
+        json.dumps(latest_payload, ensure_ascii=False, indent=2),
+        encoding='utf-8'
+    )
+    (canonical_dir / 'index.json').write_text(
+        json.dumps(index_payload, ensure_ascii=False, indent=2),
+        encoding='utf-8'
+    )
+
+    print(f'已导出 canonical JSON 数据源: {canonical_dir}')
+    return len(all_data), canonical_dir
+
+
 def validate_site_output(public_dir: Path, latest_data: Dict[str, Any]) -> None:
     """
     发布后自检（本地生成阶段）
@@ -998,6 +1081,10 @@ def copy_static_files() -> None:
 
 def main():
     """主函数"""
+    parser = argparse.ArgumentParser(description='上海公职招聘日报站点生成器')
+    parser.add_argument('--export-canonical-json-only', action='store_true', help='仅从 Markdown 导出 canonical JSON，不生成站点')
+    args = parser.parse_args()
+
     print("开始生成静态网站...")
     
     # 动态确定路径
@@ -1031,13 +1118,18 @@ def main():
         print(f"检测到GitHub Actions环境，使用相对路径")
         print(f"WEB_DIR: {WEB_DIR}")
         print(f"REPORTS_DIR: {REPORTS_DIR}")
+
+    if args.export_canonical_json_only:
+        count, canonical_dir = export_canonical_json_from_markdown(REPORTS_DIR)
+        print(f"仅导出 canonical JSON 完成，共 {count} 个日期，目录: {canonical_dir}")
+        return
     
     # 确保public目录存在
     PUBLIC_DIR.mkdir(exist_ok=True, parents=True)
     
-    # 查找所有日报文件（递归），但排除 latest.md，避免同一天重复解析
+    # 查找 Markdown 归档（递归），排除 latest.md
     md_files = [p for p in REPORTS_DIR.rglob("*.md") if p.name != "latest.md"]
-    if not md_files:
+    if not md_files and not (REPORTS_DIR / 'json').exists():
         # 尝试备用路径（递归）
         alt_reports_dir = Path("reports/shanghai-public-jobs")
         if alt_reports_dir.exists():
@@ -1048,49 +1140,62 @@ def main():
             print(f"错误: 未找到日报文件: {REPORTS_DIR}")
             print(f"尝试查找路径: {REPORTS_DIR}")
             return
-    
-    print(f"找到 {len(md_files)} 个归档日报文件（递归扫描，不含 latest.md）")
 
-    # 按日期去重：同一天如果存在多个文件，优先选择最近修改的那个
-    files_by_date = {}
+    print(f"找到 {len(md_files)} 个 Markdown 归档文件（递归扫描，不含 latest.md）")
+
+    # 建立按日期组织的数据源索引：优先 canonical JSON，Markdown 仅做兜底
+    md_by_date = {}
     for md_file in md_files:
         date_match = re.search(r'(\d{4}-\d{2}-\d{2})', md_file.name)
         if not date_match:
             continue
         date_str = date_match.group(1)
-        prev = files_by_date.get(date_str)
+        prev = md_by_date.get(date_str)
         if prev is None or md_file.stat().st_mtime > prev.stat().st_mtime:
-            files_by_date[date_str] = md_file
+            md_by_date[date_str] = md_file
 
-    selected_files = [files_by_date[d] for d in sorted(files_by_date.keys())]
-    print(f"按日期去重后保留 {len(selected_files)} 个日报文件")
+    json_by_date = {}
+    canonical_json_dir = REPORTS_DIR / 'json'
+    if canonical_json_dir.exists():
+        for json_file in canonical_json_dir.glob('*.json'):
+            if json_file.name in {'latest.json', 'index.json'}:
+                continue
+            date_match = re.search(r'(\d{4}-\d{2}-\d{2})', json_file.name)
+            if not date_match:
+                continue
+            date_str = date_match.group(1)
+            json_by_date[date_str] = json_file
+
+    all_dates = sorted(set(md_by_date.keys()) | set(json_by_date.keys()))
+    print(f"按日期组织后共有 {len(all_dates)} 个日报数据点")
     
     # 解析所有日报文件并生成HTML
     all_data = []
     latest_date = None
     latest_data = None
     
-    for md_file in selected_files:
-        # 从文件名提取日期（如2026-04-09.md）
-        date_match = re.search(r'(\d{4}-\d{2}-\d{2})', md_file.name)
-        if date_match:
-            date_str = date_match.group(1)
-            print(f"处理文件: {md_file} (日期: {date_str})")
-            
-            # 加载日报（优先 JSON，其次 Markdown）
-            data = load_report_data(md_file, REPORTS_DIR)
-            
-            # 设置日期（如果没有从文件中提取到）
-            if not data['date']:
-                data['date'] = date_str
-            
-            # 保存数据
-            all_data.append(data)
-            
-            # 检查是否为最新（按日期排序）
-            if latest_date is None or date_str > latest_date:
-                latest_date = date_str
-                latest_data = data
+    for date_str in all_dates:
+        md_file = md_by_date.get(date_str)
+        json_file = json_by_date.get(date_str)
+        if json_file:
+            print(f"处理日期: {date_str} (优先 JSON: {json_file})")
+        elif md_file:
+            print(f"处理日期: {date_str} (Markdown: {md_file})")
+        
+        # 按日期加载：优先 JSON，其次 Markdown
+        data = load_report_data(date_str, md_file, REPORTS_DIR)
+        
+        # 设置日期（如果没有从文件/JSON中提取到）
+        if not data['date']:
+            data['date'] = date_str
+        
+        # 保存数据
+        all_data.append(data)
+        
+        # 检查是否为最新（按日期排序）
+        if latest_date is None or date_str > latest_date:
+            latest_date = date_str
+            latest_data = data
     
     if not all_data:
         print("错误: 未能解析任何日报文件")

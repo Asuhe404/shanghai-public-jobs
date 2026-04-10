@@ -12,8 +12,11 @@ echo "========================================="
 REPO_URL="https://github.com/Asuhe404/shanghai-public-jobs.git"
 REPO_DIR="/tmp/shanghai-public-jobs-repo"
 BRANCH="main"
+WEB_DIR="/home/ubuntu/.openclaw/workspace/web"
 SOURCE_MD="/home/ubuntu/.openclaw/workspace/reports/shanghai-public-jobs/latest.md"
 TARGET_DIR="reports/shanghai-public-jobs"
+TARGET_JSON_DIR="$TARGET_DIR/json"
+LOCAL_PUBLIC_DATA_DIR="$WEB_DIR/public/data"
 
 # 检查源文件
 if [ ! -f "$SOURCE_MD" ]; then
@@ -22,6 +25,16 @@ if [ ! -f "$SOURCE_MD" ]; then
 fi
 
 echo "✓ 找到源日报文件: $SOURCE_MD"
+
+# 先在本地生成最新站点与 JSON 数据产物（兼容式 JSON-first）
+echo "本地生成站点与 JSON 数据产物..."
+cd "$WEB_DIR"
+python3 generate.py >/tmp/shanghai-public-jobs-generate.log 2>&1 || {
+    echo "错误: 本地 generate.py 执行失败"
+    tail -80 /tmp/shanghai-public-jobs-generate.log || true
+    exit 1
+}
+echo "✓ 本地站点与 JSON 数据产物生成完成"
 
 # 使用 GitHub Token 进行身份验证
 # 优先级：环境变量 > 本机 secrets 文件
@@ -68,6 +81,21 @@ cp "$SOURCE_MD" "$TARGET_DIR/${DATE}.md"
 
 echo "✓ 复制文件完成: $TARGET_DIR/latest.md, $TARGET_DIR/${DATE}.md"
 
+# 同步 canonical JSON 数据源到仓库，供后续构建优先使用
+mkdir -p "$TARGET_JSON_DIR"
+if [ -f "$LOCAL_PUBLIC_DATA_DIR/latest.json" ]; then
+    cp "$LOCAL_PUBLIC_DATA_DIR/latest.json" "$TARGET_JSON_DIR/latest.json"
+fi
+if [ -f "$LOCAL_PUBLIC_DATA_DIR/index.json" ]; then
+    cp "$LOCAL_PUBLIC_DATA_DIR/index.json" "$TARGET_JSON_DIR/index.json"
+fi
+if [ -f "$LOCAL_PUBLIC_DATA_DIR/${DATE}.json" ]; then
+    cp "$LOCAL_PUBLIC_DATA_DIR/${DATE}.json" "$TARGET_JSON_DIR/${DATE}.json"
+    echo "✓ 已同步 JSON 数据源: $TARGET_JSON_DIR/${DATE}.json"
+else
+    echo "警告: 未找到当天 JSON 数据源: $LOCAL_PUBLIC_DATA_DIR/${DATE}.json"
+fi
+
 # 配置Git用户
 git config user.email "agent@openclaw.ai"
 git config user.name "OpenClaw Agent"
@@ -75,6 +103,7 @@ git config user.name "OpenClaw Agent"
 # 提交更改
 echo "提交更改..."
 git add "$TARGET_DIR/"
+git add "$TARGET_JSON_DIR/" || true
 git commit -m "更新日报: ${DATE}" || {
     echo "没有更改可提交"
     exit 0
